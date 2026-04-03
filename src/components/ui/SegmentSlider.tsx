@@ -43,9 +43,7 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
         <span
           className="font-mono font-bold text-rc-xs tabular-nums"
           style={{
-            color: value > 0 ? 'var(--rc-delta-positive)'
-              : value < 0 ? 'var(--rc-delta-negative)'
-              : 'var(--rc-text-dim)',
+            color: isActive ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
           }}
         >
           {value > 0 ? '+' : ''}{value}%
@@ -61,7 +59,7 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
         onChange={(e) => setOverride(segmentId, parseFloat(e.target.value))}
         className="w-full h-1"
         style={{
-          background: `linear-gradient(to right, var(--rc-delta-negative), var(--rc-bg-hover) 50%, var(--rc-delta-positive))`,
+          background: `linear-gradient(to right, #5db8d0, var(--rc-bg-hover) 50%, #5db8d0)`,
           borderRadius: '99px',
         }}
       />

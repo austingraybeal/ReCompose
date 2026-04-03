@@ -15,7 +15,7 @@ const SceneCanvas = forwardRef<HTMLCanvasElement>(function SceneCanvas(_props, r
       <Canvas
         camera={{ fov: 40, near: 0.1, far: 100 }}
         gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
-        style={{ background: '#0a0b0f' }}
+        style={{ background: '#2a2e38' }}
         dpr={[1, 2]}
         ref={ref}
       >

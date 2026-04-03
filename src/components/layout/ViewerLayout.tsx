@@ -37,7 +37,7 @@ export default function ViewerLayout() {
           <aside
             className="hidden md:flex flex-col gap-4 w-56 p-3 overflow-y-auto shrink-0"
             style={{
-              background: 'rgba(12, 13, 19, 0.9)',
+              background: 'rgba(30, 33, 42, 0.9)',
               backdropFilter: 'blur(20px)',
               borderRight: '1px solid var(--rc-border-subtle)',
             }}
@@ -58,7 +58,7 @@ export default function ViewerLayout() {
           {/* Mobile controls (hidden during assessment) */}
           {!hideAllPanels && (
             <div className="md:hidden absolute bottom-0 left-0 right-0 p-3"
-              style={{ background: 'linear-gradient(transparent, rgba(10, 11, 15, 0.95))' }}
+              style={{ background: 'linear-gradient(transparent, rgba(30, 33, 42, 0.95))' }}
             >
               <RegionalPanel />
             </div>
@@ -70,7 +70,7 @@ export default function ViewerLayout() {
           <aside
             className="hidden lg:flex flex-col w-52 overflow-y-auto shrink-0"
             style={{
-              background: 'rgba(12, 13, 19, 0.9)',
+              background: 'rgba(30, 33, 42, 0.9)',
               backdropFilter: 'blur(20px)',
               borderLeft: '1px solid var(--rc-border-subtle)',
             }}
@@ -85,7 +85,7 @@ export default function ViewerLayout() {
         <div
           className="shrink-0"
           style={{
-            background: 'rgba(12, 13, 19, 0.95)',
+            background: 'rgba(30, 33, 42, 0.95)',
             backdropFilter: 'blur(20px)',
             borderTop: '1px solid var(--rc-border-subtle)',
           }}

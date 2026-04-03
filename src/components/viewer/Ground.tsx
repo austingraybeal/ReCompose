@@ -3,7 +3,7 @@
 import { Grid } from '@react-three/drei';
 
 /**
- * Ground plane with subtle grid.
+ * Ground plane with subtle grid — lighter to match brighter UI.
  */
 export default function Ground() {
   return (
@@ -12,10 +12,10 @@ export default function Ground() {
       position={[0, -0.001, 0]}
       cellSize={0.1}
       cellThickness={0.5}
-      cellColor="#1e2130"
+      cellColor="#3a3e4c"
       sectionSize={0.5}
       sectionThickness={1}
-      sectionColor="#2a2d3a"
+      sectionColor="#484c5c"
       fadeDistance={8}
       fadeStrength={1.5}
       infiniteGrid

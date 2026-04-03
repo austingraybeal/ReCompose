@@ -9,7 +9,7 @@ import { deformMesh } from '@/lib/morph/morphEngine';
 import type { Mesh, Intersection } from 'three';
 import { Color, BufferAttribute } from 'three';
 
-const MESH_COLOR = new Color('#8b9eb0');
+const MESH_COLOR = new Color('#a8b8c8');
 
 const SEGMENT_COLORS: Record<string, Color> = {
   shoulders: new Color('#4ac8e8'),

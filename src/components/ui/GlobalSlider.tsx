@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 
 /**
  * Master body fat percentage slider with gradient track and hero display.
+ * Uses a neutral color gradient (no red/green judgment).
  */
 export default function GlobalSlider() {
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
@@ -17,10 +18,8 @@ export default function GlobalSlider() {
 
   const actualPosition = ((originalBodyFat - 5) / (55 - 5)) * 100;
 
-  const bfColor = globalBodyFat < 20 ? 'var(--rc-bf-lean)'
-    : globalBodyFat < 30 ? 'var(--rc-bf-mid)'
-    : globalBodyFat < 40 ? 'var(--rc-bf-high)'
-    : 'var(--rc-bf-very-high)';
+  // Neutral teal-to-blue gradient — no value judgment colors
+  const bfColor = 'var(--rc-accent)';
 
   return (
     <div className="w-full max-w-2xl mx-auto px-6 py-4">

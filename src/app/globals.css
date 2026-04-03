@@ -5,50 +5,50 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');
 
 :root {
-  /* Backgrounds */
-  --rc-bg-primary: #0a0b0f;
-  --rc-bg-surface: #14161d;
-  --rc-bg-elevated: #1a1d28;
-  --rc-bg-hover: #1e2130;
+  /* Backgrounds — brighter, less harsh */
+  --rc-bg-primary: #1a1d26;
+  --rc-bg-surface: #22252f;
+  --rc-bg-elevated: #2a2e3a;
+  --rc-bg-hover: #323642;
 
-  /* Borders */
-  --rc-border-default: #1e2130;
-  --rc-border-subtle: #15171f;
+  /* Borders — more visible */
+  --rc-border-default: #3a3e4c;
+  --rc-border-subtle: #2e3240;
   --rc-border-accent: rgba(62, 207, 180, 0.3);
   --rc-border-active: rgba(62, 207, 180, 0.6);
 
-  /* Text */
-  --rc-text-primary: #e8e9ed;
-  --rc-text-secondary: #9ca0b0;
-  --rc-text-dim: #6b7080;
-  --rc-text-inverse: #0a0b0f;
+  /* Text — brighter */
+  --rc-text-primary: #f0f1f4;
+  --rc-text-secondary: #b0b4c4;
+  --rc-text-dim: #808498;
+  --rc-text-inverse: #1a1d26;
 
   /* Accent */
   --rc-accent: #3ecfb4;
   --rc-accent-dim: rgba(62, 207, 180, 0.12);
   --rc-accent-glow: rgba(62, 207, 180, 0.35);
 
-  /* Body fat spectrum */
+  /* Body fat spectrum — neutral teal gradient (no red/green judgment) */
   --rc-bf-lean: #3ecfb4;
-  --rc-bf-mid: #f0c84a;
-  --rc-bf-high: #f0764a;
-  --rc-bf-very-high: #e0445a;
+  --rc-bf-mid: #5db8d0;
+  --rc-bf-high: #7aa0e0;
+  --rc-bf-very-high: #9088e8;
 
-  /* Deltas */
-  --rc-delta-positive: #f0764a;
-  --rc-delta-negative: #3ecfb4;
-  --rc-delta-neutral: #6b7080;
+  /* Deltas — subtle, non-judgmental */
+  --rc-delta-positive: #7aa0e0;
+  --rc-delta-negative: #5db8d0;
+  --rc-delta-neutral: #808498;
 
   /* Segment highlight colors */
   --rc-seg-shoulders: #4ac8e8;
   --rc-seg-arms: #5de8d0;
   --rc-seg-torso: #4acfa0;
-  --rc-seg-waist: #f0c84a;
-  --rc-seg-hips: #f0764a;
+  --rc-seg-waist: #5db8d0;
+  --rc-seg-hips: #7aa0e0;
   --rc-seg-legs: #a78bfa;
 
   /* Shadows */
-  --rc-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --rc-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.3);
   --rc-shadow-glow: 0 0 20px rgba(62, 207, 180, 0.2);
 
   /* Typography */
@@ -104,7 +104,7 @@ input[type='range']::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--rc-accent);
   margin-top: -6px;
-  border: 2px solid var(--rc-bg-primary);
+  border: 2px solid var(--rc-bg-elevated);
   box-shadow: 0 0 8px rgba(62, 207, 180, 0.4);
   transition: transform 100ms ease;
 }
@@ -123,7 +123,7 @@ input[type='range']::-moz-range-thumb {
   height: 18px;
   border-radius: 50%;
   background: var(--rc-accent);
-  border: 2px solid var(--rc-bg-primary);
+  border: 2px solid var(--rc-bg-elevated);
   box-shadow: 0 0 8px rgba(62, 207, 180, 0.4);
   transition: transform 100ms ease;
 }

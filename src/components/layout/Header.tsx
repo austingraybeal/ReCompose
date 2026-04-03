@@ -14,7 +14,7 @@ export default function Header() {
     <header
       className="flex items-center justify-between px-5 py-2.5"
       style={{
-        background: 'rgba(10, 11, 15, 0.85)',
+        background: 'rgba(30, 33, 42, 0.85)',
         backdropFilter: 'blur(20px)',
         borderBottom: '1px solid var(--rc-border-subtle)',
       }}

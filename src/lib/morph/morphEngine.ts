@@ -3,7 +3,7 @@ import { ARM_SENSITIVITY } from './sensitivityModel';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 
 /** Minimum and maximum scale factors to keep the body humanoid */
-const MIN_SCALE = 0.65;
+const MIN_SCALE = 0.75;
 const MAX_SCALE = 1.55;
 
 /**
@@ -165,10 +165,26 @@ export function deformMesh(
     let cx: number, cz: number, combinedScale: number;
 
     if (binding.segmentId === 'arms') {
-      // Arms: scale volumetrically from arm center (both X and Z expansion)
-      if (ox < axisCX) { cx = leftCX; cz = leftCZ; }
-      else { cx = rightCX; cz = rightCZ; }
-      combinedScale = armScaleBase;
+      // Compute arm-local center
+      const armCX = ox < axisCX ? leftCX : rightCX;
+      const armCZ = ox < axisCX ? leftCZ : rightCZ;
+
+      // Near the shoulder junction (high Y), blend arm center → torso center
+      // and arm scale → torso scale to prevent tearing.
+      // Full arm-center below y=0.58, full torso-center above y=0.68
+      const junctionBlend = Math.min(1, Math.max(0, (oy - 0.58) / 0.10));
+      cx = armCX + junctionBlend * (axisCX - armCX);
+      cz = armCZ + junctionBlend * (axisCZ - armCZ);
+
+      // Compute what the torso scale would be at this height
+      const torsoSens = sensitivity(oy);
+      const torsoGlobalScale = 1 + (deltaBodyFat * torsoSens / 100);
+      const torsoOverride = blendedSegmentOverride(oy, overrides);
+      const torsoRegionalScale = 1 + torsoOverride / 100;
+      const torsoScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, torsoGlobalScale * torsoRegionalScale));
+
+      // Blend between arm scale and torso scale near the junction
+      combinedScale = armScaleBase + junctionBlend * (torsoScale - armScaleBase);
     } else {
       cx = axisCX;
       cz = axisCZ;
