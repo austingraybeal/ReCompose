@@ -1,8 +1,8 @@
 import type { LandmarkRing, VertexBinding, SegmentId } from '@/types/scan';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
-import { RING_SENSITIVITY, ARM_SENSITIVITY } from './sensitivityModel';
 
-const TRANSITION_ZONE = 30; // mm vertical height for blending between segments
+/** Transition zone width in normalized Y (0-1) for blending between segments */
+const TRANSITION_ZONE = 0.02;
 
 /**
  * Compute the torso half-width threshold for arm detection.
@@ -20,18 +20,18 @@ export function computeArmThreshold(rings: LandmarkRing[]): number {
 }
 
 /**
- * Determine which segment a given Y-height belongs to.
+ * Determine which segment a given normalized Y-height (0-1) belongs to.
  */
-function getSegmentForHeight(y: number): SegmentId {
+function getSegmentForHeight(normalizedY: number): SegmentId {
   for (const seg of SEGMENTS) {
     if (seg.isLateral) continue; // Skip arms (lateral classification)
-    if (y >= seg.yRange[0] && y <= seg.yRange[1]) {
+    if (normalizedY >= seg.yRange[0] && normalizedY <= seg.yRange[1]) {
       return seg.id;
     }
   }
   // Default to closest segment
-  if (y > 1380) return 'shoulders';
-  if (y < 0) return 'legs';
+  if (normalizedY > 0.82) return 'shoulders';
+  if (normalizedY < 0) return 'legs';
   return 'legs';
 }
 
@@ -83,17 +83,17 @@ function findBoundingRings(
 
 /**
  * Check if a vertex is in a transition zone between segments.
- * Returns blend weight and adjacent segment ID if so.
+ * Uses normalized Y (0-1). Returns blend weight and adjacent segment ID.
  */
 function checkTransitionZone(
-  y: number,
+  normalizedY: number,
   segmentId: SegmentId
 ): { blendWeight: number; blendSegmentId: string | null } {
   const seg = SEGMENTS.find(s => s.id === segmentId);
   if (!seg || seg.isLateral) return { blendWeight: 0, blendSegmentId: null };
 
   // Check lower boundary
-  const distToLower = y - seg.yRange[0];
+  const distToLower = normalizedY - seg.yRange[0];
   if (distToLower >= 0 && distToLower < TRANSITION_ZONE) {
     const belowSeg = SEGMENTS.find(s => !s.isLateral && s.yRange[1] === seg.yRange[0]);
     if (belowSeg) {
@@ -105,7 +105,7 @@ function checkTransitionZone(
   }
 
   // Check upper boundary
-  const distToUpper = seg.yRange[1] - y;
+  const distToUpper = seg.yRange[1] - normalizedY;
   if (distToUpper >= 0 && distToUpper < TRANSITION_ZONE) {
     const aboveSeg = SEGMENTS.find(s => !s.isLateral && s.yRange[0] === seg.yRange[1]);
     if (aboveSeg) {
@@ -123,8 +123,8 @@ function checkTransitionZone(
  * Classify all mesh vertices into body segments and compute binding data.
  *
  * @param positions - Float32Array of vertex positions (x,y,z triples) in original mm space
- * @param rings - Sorted landmark rings (highest to lowest)
- * @param armThreshold - X-distance threshold for arm classification
+ * @param rings - Sorted landmark rings (highest to lowest, in mm space)
+ * @param armThreshold - X-distance threshold for arm classification (mm)
  * @returns Array of VertexBinding, one per vertex
  */
 export function classifyVertices(
@@ -144,6 +144,17 @@ export function classifyVertices(
   const ankleRing = rings.find(r => r.name.includes('Ankle'));
   const ankleHeight = ankleRing ? ankleRing.height : 80;
 
+  // Compute body height range for normalizing Y to 0-1
+  // (segment yRanges in segmentDefs are in normalized 0-1 space)
+  let minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < vertexCount; i++) {
+    const y = positions[i * 3 + 1];
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const bodyHeight = maxY - minY;
+  const normalizeY = bodyHeight > 0 ? (y: number) => (y - minY) / bodyHeight : () => 0;
+
   for (let i = 0; i < vertexCount; i++) {
     const x = positions[i * 3];
     const y = positions[i * 3 + 1];
@@ -153,14 +164,17 @@ export function classifyVertices(
     const xDist = Math.abs(x - centerX);
     const isArm = xDist > armThreshold && y > ankleHeight;
 
-    // Find bounding rings
+    // Find bounding rings (uses raw mm heights)
     const { aboveIdx, belowIdx, weight } = findBoundingRings(y, rings);
+
+    // Normalize Y to 0-1 for segment lookup (segment yRanges are 0-1)
+    const ny = normalizeY(y);
 
     let segmentId: SegmentId;
     if (isArm) {
       segmentId = 'arms';
     } else {
-      segmentId = getSegmentForHeight(y);
+      segmentId = getSegmentForHeight(ny);
     }
 
     // Compute radial angle and distance from nearest ring center
@@ -173,10 +187,10 @@ export function classifyVertices(
     const radialAngle = Math.atan2(dz, dx);
     const radialDistance = Math.sqrt(dx * dx + dz * dz);
 
-    // Check transition zones
+    // Check transition zones (uses normalized Y)
     const { blendWeight, blendSegmentId } = isArm
       ? { blendWeight: 0, blendSegmentId: null }
-      : checkTransitionZone(y, segmentId);
+      : checkTransitionZone(ny, segmentId);
 
     bindings[i] = {
       segmentId,
