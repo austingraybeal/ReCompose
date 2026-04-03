@@ -1,56 +1,47 @@
 import type { LandmarkRing, VertexBinding, SegmentOverrides } from '@/types/scan';
 import type { SMPLConstraints } from '@/lib/smpl/constraints';
-import { smplSensitivity, smplScaleLimits } from '@/lib/smpl/constraints';
+import { smplSensitivity } from '@/lib/smpl/constraints';
 import { ARM_SENSITIVITY } from './sensitivityModel';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 
-/** Fallback minimum and maximum scale factors (used when no SMPL constraints) */
+/** Minimum and maximum scale factors to keep the body humanoid */
 const MIN_SCALE = 0.75;
 const MAX_SCALE = 1.55;
 
 /**
- * Fallback sensitivity profile (hand-tuned Gaussians).
- * Used when no SMPL model is loaded.
+ * Smooth sensitivity profile. Returns how much a region changes per 1% BF.
+ * Uses overlapping Gaussians with a base floor so the entire body responds.
+ *
+ * When SMPL constraints are available, we modulate the hand-tuned curve
+ * with SMPL's learned relative pattern. This preserves the working magnitude
+ * while using SMPL's knowledge of WHERE fat distributes differently
+ * for male vs female bodies.
  */
-function fallbackSensitivity(y: number): number {
+function sensitivity(y: number, constraints?: SMPLConstraints | null): number {
   const BASE = 0.18;
 
   const g = (center: number, sigma: number, peak: number) =>
     peak * Math.exp(-((y - center) ** 2) / (2 * sigma * sigma));
 
-  return BASE
+  const handTuned = BASE
     + g(0.54, 0.09, 0.88)   // waist/belly
     + g(0.43, 0.08, 0.65)   // hips
     + g(0.64, 0.07, 0.50)   // bust/chest
     + g(0.32, 0.09, 0.50)   // upper thighs
     + g(0.15, 0.10, 0.20)   // calves
     + g(0.74, 0.08, 0.30);  // upper chest/shoulders
-}
 
-/**
- * Get sensitivity at height y, using SMPL constraints if available.
- * SMPL sensitivity is scaled to match the same units as fallback.
- */
-function getSensitivity(y: number, constraints: SMPLConstraints | null): number {
-  if (!constraints) return fallbackSensitivity(y);
+  if (!constraints) return handTuned;
 
-  // SMPL sensitivity is fractional change per unit beta.
-  // Scale it so the overall deformation magnitude matches Phase 1.
-  // The fallback peaks at ~1.06, SMPL peaks at ~0.03-0.05.
-  // We multiply SMPL values to bring them into the same range.
+  // Use SMPL to gently modulate the hand-tuned curve.
+  // SMPL sensitivity is small (0.01-0.05 range), so we normalize it
+  // relative to its own peak and blend it with the hand-tuned curve.
+  // This shifts fat distribution toward male or female patterns
+  // without killing the overall deformation magnitude.
   const smplSens = smplSensitivity(constraints, y);
-  const scaled = smplSens * 20; // Scale up to match Phase 1 sensitivity units
+  const smplFactor = 1 + smplSens * 5; // Gentle modulation: ±25% shift
 
-  // Blend with a base floor so the entire body responds
-  return Math.max(0.15, scaled);
-}
-
-/**
- * Get scale limits at height y, using SMPL constraints if available.
- */
-function getScaleLimits(y: number, constraints: SMPLConstraints | null): [number, number] {
-  if (!constraints) return [MIN_SCALE, MAX_SCALE];
-  return smplScaleLimits(constraints, y);
+  return handTuned * smplFactor;
 }
 
 /**
@@ -166,8 +157,7 @@ export function deformMesh(
   const armOverrideCombined = overrides.arms + overrides.shoulders * 0.5;
   const armGlobal = 1 + (deltaBodyFat * ARM_SENSITIVITY / 100);
   const armRegional = 1 + (armOverrideCombined / 100);
-  const [armMin, armMax] = getScaleLimits(0.65, constraints ?? null);
-  const armScaleBase = Math.max(armMin, Math.min(armMax, armGlobal * armRegional));
+  const armScaleBase = Math.max(MIN_SCALE, Math.min(MAX_SCALE, armGlobal * armRegional));
 
   // Phase 1: Radial displacement with SMPL-informed scaling
   for (let i = 0; i < vertexCount; i++) {
@@ -193,27 +183,25 @@ export function deformMesh(
       cx = armCX + junctionBlend * (axisCX - armCX);
       cz = armCZ + junctionBlend * (axisCZ - armCZ);
 
-      const torsoSens = getSensitivity(oy, constraints ?? null);
+      const torsoSens = sensitivity(oy, constraints);
       const torsoGlobalScale = 1 + (deltaBodyFat * torsoSens / 100);
       const torsoOverride = blendedSegmentOverride(oy, overrides);
       const torsoRegionalScale = 1 + torsoOverride / 100;
-      const [tMin, tMax] = getScaleLimits(oy, constraints ?? null);
-      const torsoScale = Math.max(tMin, Math.min(tMax, torsoGlobalScale * torsoRegionalScale));
+      const torsoScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, torsoGlobalScale * torsoRegionalScale));
 
       combinedScale = armScaleBase + junctionBlend * (torsoScale - armScaleBase);
     } else {
       cx = axisCX;
       cz = axisCZ;
 
-      const sens = getSensitivity(oy, constraints ?? null);
+      const sens = sensitivity(oy, constraints);
       const globalScale = 1 + (deltaBodyFat * sens / 100);
       const overrideValue = blendedSegmentOverride(oy, overrides);
       const regionalScale = 1 + overrideValue / 100;
       combinedScale = globalScale * regionalScale;
 
-      // Clamp to SMPL-derived limits (or fallback)
-      const [sMin, sMax] = getScaleLimits(oy, constraints ?? null);
-      combinedScale = Math.max(sMin, Math.min(sMax, combinedScale));
+      // Clamp to physiological range
+      combinedScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, combinedScale));
     }
 
     const dx = ox - cx;
