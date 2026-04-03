@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useViewStore } from '@/lib/stores/viewStore';
+import { useSmplStore } from '@/lib/stores/smplStore';
 import { Color } from 'three';
 
 const GHOST_COLOR = new Color('#3ecfb4');
@@ -16,6 +17,7 @@ const GHOST_COLOR = new Color('#3ecfb4');
 export default function GhostOverlay() {
   const scanData = useScanStore((s) => s.scanData);
   const ghostOverlay = useViewStore((s) => s.ghostOverlay);
+  const useSmpl = useSmplStore((s) => s.useSmpl);
 
   // Clone geometry once for the ghost so it's independent of BodyMesh's clone
   const ghostGeometry = useMemo(() => {
@@ -23,6 +25,8 @@ export default function GhostOverlay() {
     return scanData.geometry.clone();
   }, [scanData]);
 
+  // Hide ghost overlay when SMPL model is active (no scan mesh to compare against)
+  if (useSmpl) return null;
   if (!scanData || !ghostOverlay || !ghostGeometry) return null;
 
   return (

@@ -1,20 +1,12 @@
 /**
  * Parameter Mapper — translates ReCompose UI values to SMPL beta parameters.
  *
- * SMPL's first few shape components roughly correspond to:
- *   beta[0] — overall body size / weight (strongly correlated with BMI)
- *   beta[1] — height (taller/shorter)
- *   beta[2] — body proportions (limb length vs torso)
- *   beta[3+] — finer shape details
+ * SMPL betas are PCA coefficients in standard deviation units.
+ * Typical human variation stays within beta ∈ [-3, +3].
+ * beta[0] correlates strongly with overall body size/weight.
  *
- * This mapper uses a configurable mapping table so different SMPL model
- * extractions can define their own beta semantics. The default mapping
- * is based on the standard SMPL neutral model trained on CAESAR data,
- * where beta[0] correlates most strongly with body mass/fat.
- *
- * The mapping can be refined by fitting a linear regression from
- * (BF%, segment measurements) → betas on a dataset of scans with
- * known body composition. For now we use an analytical approximation.
+ * The mapping must be conservative — even at 55% BF (extreme),
+ * betas should stay within reasonable bounds to avoid alien shapes.
  */
 
 import type { SegmentOverrides } from '@/types/scan';
@@ -25,30 +17,39 @@ export interface BetaMappingConfig {
   massBetaIndex: number;
   /** Scale factor: how much beta changes per 1% body fat delta */
   massPerBfPercent: number;
+  /** Maximum absolute beta value (clamp) */
+  maxBeta: number;
   /** Optional per-segment beta mappings */
   segmentMappings?: {
     segmentId: string;
     betaIndex: number;
-    /** Scale: how much beta changes per 1% segment override */
     scalePerPercent: number;
   }[];
 }
 
 /**
  * Default mapping for standard SMPL neutral model.
- * These values are approximate and should be calibrated against
- * real scan data for clinical use.
+ *
+ * These values are intentionally conservative. SMPL beta[0] corresponds
+ * roughly to overall body size. A delta of ±30% BF should produce
+ * visible but realistic changes, not extreme deformation.
+ *
+ * beta[0] ≈ 2.0 at the extreme should look like a large person,
+ * not an alien. So 30% BF delta → beta ~2.0 means 0.065 per percent.
  */
 export const DEFAULT_MAPPING: BetaMappingConfig = {
   massBetaIndex: 0,
-  massPerBfPercent: 0.15,
+  massPerBfPercent: 0.06,
+  maxBeta: 3.0,
   segmentMappings: [
-    { segmentId: 'torso', betaIndex: 0, scalePerPercent: 0.08 },
-    { segmentId: 'waist', betaIndex: 0, scalePerPercent: 0.10 },
-    { segmentId: 'hips', betaIndex: 0, scalePerPercent: 0.06 },
-    { segmentId: 'shoulders', betaIndex: 3, scalePerPercent: 0.05 },
-    { segmentId: 'arms', betaIndex: 3, scalePerPercent: 0.03 },
-    { segmentId: 'legs', betaIndex: 0, scalePerPercent: 0.04 },
+    // Segments add small contributions to beta[0] (body size)
+    { segmentId: 'torso', betaIndex: 0, scalePerPercent: 0.015 },
+    { segmentId: 'waist', betaIndex: 0, scalePerPercent: 0.02 },
+    { segmentId: 'hips', betaIndex: 0, scalePerPercent: 0.012 },
+    { segmentId: 'legs', betaIndex: 0, scalePerPercent: 0.008 },
+    // Shoulders/arms contribute to beta[1] (proportions)
+    { segmentId: 'shoulders', betaIndex: 1, scalePerPercent: 0.01 },
+    { segmentId: 'arms', betaIndex: 1, scalePerPercent: 0.006 },
   ],
 };
 
@@ -59,7 +60,7 @@ export const DEFAULT_MAPPING: BetaMappingConfig = {
  * @param segmentOverrides - Per-segment slider values (-100 to +100)
  * @param componentCount   - Number of shape components (typically 10)
  * @param config           - Mapping configuration
- * @returns Float32Array of beta values
+ * @returns Float32Array of beta values (clamped to safe range)
  */
 export function mapToBetas(
   deltaBodyFat: number,
@@ -82,12 +83,16 @@ export function mapToBetas(
     }
   }
 
+  // Clamp all betas to safe range to prevent alien shapes
+  for (let i = 0; i < componentCount; i++) {
+    betas[i] = Math.max(-config.maxBeta, Math.min(config.maxBeta, betas[i]));
+  }
+
   return betas;
 }
 
 /**
  * Estimate body fat % from a beta vector (inverse mapping).
- * Useful for displaying estimated BF% when user manipulates betas directly.
  */
 export function estimateBfFromBetas(
   betas: Float32Array,
