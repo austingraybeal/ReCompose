@@ -54,7 +54,8 @@ export default function BodyMesh() {
       scanData.vertexBindings,
       scanData.rings,
       deltaBodyFat,
-      segmentOverrides
+      segmentOverrides,
+      scanData.adjacency
     );
 
     positions.needsUpdate = true;

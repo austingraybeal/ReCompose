@@ -54,8 +54,8 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
 
       <input
         type="range"
-        min="-50"
-        max="50"
+        min="-25"
+        max="25"
         step="1"
         value={value}
         onChange={(e) => setOverride(segmentId, parseFloat(e.target.value))}
