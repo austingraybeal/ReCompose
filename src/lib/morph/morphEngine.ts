@@ -1,102 +1,107 @@
 import type { LandmarkRing, VertexBinding, SegmentOverrides, SegmentId } from '@/types/scan';
-import { RING_SENSITIVITY, ARM_SENSITIVITY } from './sensitivityModel';
+import { ARM_SENSITIVITY } from './sensitivityModel';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 
 /**
- * Build a continuous sensitivity curve from discrete ring samples.
- * Returns a function: normalizedY → sensitivity value.
+ * Smooth analytical sensitivity profile as a function of normalized Y height.
+ * Returns how much a body region changes per 1% body fat change.
  *
- * Uses linear interpolation between ring heights for smooth results.
- * Rings must be sorted by height (descending).
+ * Uses a hand-tuned smooth curve with no discrete ring boundaries.
+ * All areas get a base sensitivity so the whole body responds to the global slider.
+ *
+ * @param y - Normalized height (0 = feet, 1 = top of head)
+ * @returns Sensitivity coefficient (0.1 - 1.0)
  */
-function buildSensitivityCurve(rings: LandmarkRing[]): (y: number) => number {
-  if (rings.length === 0) return () => 0;
+function sensitivity(y: number): number {
+  // Define control points: [height, sensitivity]
+  // Smooth bell-shaped curve centered on the midsection (waist/belly)
+  // with a secondary bump at hip level and gentle falloff everywhere else
 
-  // Build sorted (ascending) height→sensitivity pairs
-  const samples: { y: number; s: number }[] = [];
-  for (const ring of rings) {
-    const s = RING_SENSITIVITY[ring.name] ?? 0;
-    samples.push({ y: ring.height, s });
-  }
-  samples.sort((a, b) => a.y - b.y);
+  const BASE = 0.10; // Everything gets at least 10% sensitivity
 
-  return (y: number): number => {
-    if (samples.length === 0) return 0;
-    if (y <= samples[0].y) return samples[0].s;
-    if (y >= samples[samples.length - 1].y) return samples[samples.length - 1].s;
+  // Primary fat depot: waist/belly region (y ≈ 0.50-0.58)
+  const waistCenter = 0.54;
+  const waistSigma = 0.06;
+  const waistPeak = 0.85;
+  const waistContrib = waistPeak * Math.exp(-((y - waistCenter) ** 2) / (2 * waistSigma ** 2));
 
-    // Find bounding samples
-    for (let i = 0; i < samples.length - 1; i++) {
-      if (y >= samples[i].y && y <= samples[i + 1].y) {
-        const range = samples[i + 1].y - samples[i].y;
-        const t = range > 0 ? (y - samples[i].y) / range : 0;
-        // Smooth step interpolation
-        const st = t * t * (3 - 2 * t);
-        return samples[i].s + (samples[i + 1].s - samples[i].s) * st;
-      }
-    }
-    return 0;
-  };
+  // Secondary: hip region (y ≈ 0.42)
+  const hipCenter = 0.43;
+  const hipSigma = 0.04;
+  const hipPeak = 0.55;
+  const hipContrib = hipPeak * Math.exp(-((y - hipCenter) ** 2) / (2 * hipSigma ** 2));
+
+  // Tertiary: bust/chest (y ≈ 0.64)
+  const bustCenter = 0.64;
+  const bustSigma = 0.04;
+  const bustPeak = 0.40;
+  const bustContrib = bustPeak * Math.exp(-((y - bustCenter) ** 2) / (2 * bustSigma ** 2));
+
+  // Upper thigh region (y ≈ 0.35)
+  const thighCenter = 0.32;
+  const thighSigma = 0.06;
+  const thighPeak = 0.45;
+  const thighContrib = thighPeak * Math.exp(-((y - thighCenter) ** 2) / (2 * thighSigma ** 2));
+
+  // Lower leg falloff (y < 0.25) — still some scaling but less
+  const calfCenter = 0.15;
+  const calfSigma = 0.08;
+  const calfPeak = 0.15;
+  const calfContrib = calfPeak * Math.exp(-((y - calfCenter) ** 2) / (2 * calfSigma ** 2));
+
+  // Shoulder region (y ≈ 0.75)
+  const shoulderCenter = 0.75;
+  const shoulderSigma = 0.04;
+  const shoulderPeak = 0.20;
+  const shoulderContrib = shoulderPeak * Math.exp(-((y - shoulderCenter) ** 2) / (2 * shoulderSigma ** 2));
+
+  // Sum all contributions
+  return BASE + waistContrib + hipContrib + bustContrib + thighContrib + calfContrib + shoulderContrib;
 }
 
 /**
- * Compute per-segment Gaussian influence at a given normalized Y height.
- * Returns an object mapping segment ID to its influence weight (0-1).
- * Segment with the strongest influence gets the most override effect.
+ * Compute Gaussian-blended segment override at a normalized Y height.
+ * All non-lateral segments contribute with smooth falloff.
  */
-function segmentInfluence(y: number): Record<SegmentId, number> {
-  const result: Record<string, number> = {};
+function blendedSegmentOverride(y: number, overrides: SegmentOverrides): number {
+  let totalWeight = 0;
+  let blendedValue = 0;
+
   for (const seg of SEGMENTS) {
     if (seg.isLateral) continue;
     const dist = y - seg.yCenter;
-    const weight = Math.exp(-(dist * dist) / (2 * seg.sigma * seg.sigma));
-    result[seg.id] = weight;
+    const w = Math.exp(-(dist * dist) / (2 * seg.sigma * seg.sigma));
+    if (w > 0.001) {
+      blendedValue += overrides[seg.id] * w;
+      totalWeight += w;
+    }
   }
-  return result as Record<SegmentId, number>;
+
+  return totalWeight > 0 ? blendedValue / totalWeight : 0;
 }
 
 /**
- * Compute the angular scaling multiplier based on radial direction.
- * Front (anterior, +Z) gets 1.15x, back (posterior, -Z) gets 0.90x.
- *
- * @param dx - X displacement from center
- * @param dz - Z displacement from center
- * @param scale - Base scale factor
+ * Apply directional scaling: front (anterior) expands more than back.
  */
 function directionalScale(dx: number, dz: number, scale: number): number {
   const dist = Math.sqrt(dx * dx + dz * dz);
   if (dist < 0.0001) return scale;
 
-  // Z component of normalized direction: positive = front, negative = back
   const zNorm = dz / dist;
-
-  let multiplier: number;
-  if (zNorm >= 0) {
-    multiplier = 1.0 + 0.15 * zNorm; // up to 1.15 at pure front
-  } else {
-    multiplier = 1.0 + 0.10 * zNorm; // down to 0.90 at pure back
-  }
+  // Front: up to +12%, Back: down to -8%
+  const multiplier = zNorm >= 0
+    ? 1.0 + 0.12 * zNorm
+    : 1.0 + 0.08 * zNorm;
 
   return scale * multiplier;
 }
 
 /**
- * Main deformation function. Uses continuous height-based scaling with
- * Gaussian segment influence — no discrete rings or banding.
+ * Main deformation function.
  *
- * For each vertex:
- *  1. Sample the continuous sensitivity curve at vertex Y height
- *  2. Compute global scale from sensitivity * deltaBodyFat
- *  3. Blend ALL segment overrides using Gaussian influence at vertex height
- *  4. Apply directional scaling (front bias)
- *  5. Displace radially from center axis
- *
- * @param positions - Float32Array to modify
- * @param originalPositions - Undeformed vertex positions
- * @param bindings - Per-vertex classification data
- * @param rings - Landmark rings in normalized space
- * @param deltaBodyFat - Current BF minus original BF
- * @param overrides - Per-segment slider values (-50 to +50)
+ * Uses a smooth analytical sensitivity profile (no discrete rings) with
+ * Gaussian segment blending for regional overrides. All body areas respond
+ * to the global slider proportionally.
  */
 export function deformMesh(
   positions: Float32Array,
@@ -106,22 +111,20 @@ export function deformMesh(
   deltaBodyFat: number,
   overrides: SegmentOverrides
 ): void {
-  if (rings.length === 0) return;
-
-  // Build continuous sensitivity curve
-  const getSensitivity = buildSensitivityCurve(rings);
-
-  // Compute center axis (average of ring centers X, Z)
+  // Compute center axis
   let axisCX = 0, axisCZ = 0;
-  for (const ring of rings) {
-    axisCX += ring.center.x;
-    axisCZ += ring.center.z;
+  if (rings.length > 0) {
+    for (const ring of rings) {
+      axisCX += ring.center.x;
+      axisCZ += ring.center.z;
+    }
+    axisCX /= rings.length;
+    axisCZ /= rings.length;
   }
-  axisCX /= rings.length;
-  axisCZ /= rings.length;
 
-  // Precompute arm centers
   const vertexCount = originalPositions.length / 3;
+
+  // Compute arm center axes
   let lArmX = 0, lArmZ = 0, lCount = 0;
   let rArmX = 0, rArmZ = 0, rCount = 0;
 
@@ -139,10 +142,9 @@ export function deformMesh(
   const rightCX = rCount > 0 ? rArmX / rCount : axisCX + 0.12;
   const rightCZ = rCount > 0 ? rArmZ / rCount : axisCZ;
 
-  // Arm global scale
-  const armGlobalScale = 1 + (deltaBodyFat * ARM_SENSITIVITY / 100);
-  const armRegionalScale = 1 + (overrides.arms / 100);
-  const armScale = armGlobalScale * armRegionalScale;
+  const armGlobal = 1 + (deltaBodyFat * ARM_SENSITIVITY / 100);
+  const armRegional = 1 + (overrides.arms / 100);
+  const armScale = armGlobal * armRegional;
 
   for (let i = 0; i < vertexCount; i++) {
     const binding = bindings[i];
@@ -160,52 +162,34 @@ export function deformMesh(
     let cx: number, cz: number, combinedScale: number;
 
     if (binding.segmentId === 'arms') {
-      // Arms: scale from local arm center axis
       if (ox < axisCX) { cx = leftCX; cz = leftCZ; }
       else { cx = rightCX; cz = rightCZ; }
       combinedScale = armScale;
     } else {
-      // Body: continuous height-based scaling
       cx = axisCX;
       cz = axisCZ;
 
-      // 1. Global scale from sensitivity curve
-      const sensitivity = getSensitivity(oy);
-      const globalScale = 1 + (deltaBodyFat * sensitivity / 100);
+      // Global scale from smooth sensitivity profile
+      const sens = sensitivity(oy);
+      const globalScale = 1 + (deltaBodyFat * sens / 100);
 
-      // 2. Regional overrides with Gaussian influence blending
-      // Each segment contributes proportionally to its Gaussian weight
-      const influence = segmentInfluence(oy);
-      let totalWeight = 0;
-      let blendedOverride = 0;
-
-      for (const seg of SEGMENTS) {
-        if (seg.isLateral) continue;
-        const w = influence[seg.id] ?? 0;
-        if (w > 0.001) {
-          blendedOverride += overrides[seg.id] * w;
-          totalWeight += w;
-        }
-      }
-
-      const regionalScale = totalWeight > 0
-        ? 1 + (blendedOverride / totalWeight) / 100
-        : 1;
+      // Regional override blended across segments via Gaussian
+      const overrideValue = blendedSegmentOverride(oy, overrides);
+      const regionalScale = 1 + overrideValue / 100;
 
       combinedScale = globalScale * regionalScale;
     }
 
-    // Radial displacement from center
+    // Radial displacement
     const dx = ox - cx;
     const dz = oz - cz;
     const dist = Math.sqrt(dx * dx + dz * dz);
 
     if (dist > 0.0001) {
       const finalScale = directionalScale(dx, dz, combinedScale);
-      const ratio = finalScale;
-      positions[i * 3] = cx + dx * ratio;
+      positions[i * 3] = cx + dx * finalScale;
       positions[i * 3 + 1] = oy;
-      positions[i * 3 + 2] = cz + dz * ratio;
+      positions[i * 3 + 2] = cz + dz * finalScale;
     } else {
       positions[i * 3] = ox;
       positions[i * 3 + 1] = oy;
