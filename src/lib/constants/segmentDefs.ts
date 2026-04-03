@@ -24,7 +24,7 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-shoulders)',
     yRange: [0.66, 0.82],
     yCenter: 0.74,
-    sigma: 0.06,
+    sigma: 0.08,
   },
   {
     id: 'arms',
@@ -34,7 +34,7 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-arms)',
     yRange: [0.05, 0.74],
     yCenter: 0.45,
-    sigma: 0.15,
+    sigma: 0.18,
     isLateral: true,
   },
   {
@@ -45,7 +45,7 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-torso)',
     yRange: [0.59, 0.66],
     yCenter: 0.62,
-    sigma: 0.05,
+    sigma: 0.08,
   },
   {
     id: 'waist',
@@ -55,7 +55,7 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-waist)',
     yRange: [0.48, 0.59],
     yCenter: 0.535,
-    sigma: 0.05,
+    sigma: 0.08,
   },
   {
     id: 'hips',
@@ -65,7 +65,7 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-hips)',
     yRange: [0.39, 0.48],
     yCenter: 0.435,
-    sigma: 0.04,
+    sigma: 0.08,
   },
   {
     id: 'legs',
@@ -85,7 +85,7 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-legs)',
     yRange: [0.0, 0.39],
     yCenter: 0.20,
-    sigma: 0.12,
+    sigma: 0.14,
   },
 ];
 

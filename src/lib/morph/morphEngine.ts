@@ -203,8 +203,8 @@ export function deformMesh(
     // More smoothing for larger deformations
     const deformMagnitude = Math.abs(deltaBodyFat) +
       Object.values(overrides).reduce((s, v) => s + Math.abs(v), 0) / 6;
-    const iterations = deformMagnitude > 10 ? 3 : deformMagnitude > 3 ? 2 : 1;
-    const lambda = 0.4;
+    const iterations = deformMagnitude > 10 ? 4 : deformMagnitude > 3 ? 3 : 2;
+    const lambda = 0.45;
     laplacianSmooth(positions, originalPositions, adjacency, iterations, lambda);
   }
 }
