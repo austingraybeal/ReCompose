@@ -88,13 +88,36 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     return <WelcomeScreen />;
   }
 
-  // Results screen
-  if (currentStep === 'complete' && assessmentRecord) {
-    return <ResultsSummary />;
+  // Results screen (or waiting for scores to compute)
+  if (currentStep === 'complete') {
+    if (assessmentRecord) {
+      return <ResultsSummary />;
+    }
+    // Scores are being calculated — show a brief loading state
+    return (
+      <div className="absolute inset-0 z-50 flex items-center justify-center"
+        style={{ background: 'rgba(10, 11, 15, 0.95)', backdropFilter: 'blur(24px)' }}
+      >
+        <div className="text-center">
+          <div
+            className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+            style={{ borderColor: 'var(--rc-accent)', borderTopColor: 'transparent' }}
+          />
+          <p className="text-rc-sm font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+            Calculating scores...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Guard: only render task UI for valid task types
+  if (currentStep !== 'perceived' && currentStep !== 'ideal' && currentStep !== 'partner') {
+    return null;
   }
 
   // Active task
-  const taskType = currentStep as TaskType;
+  const taskType = currentStep;
 
   return (
     <AnimatePresence>
