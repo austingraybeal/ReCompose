@@ -570,6 +570,171 @@ Body scan data is sensitive biometric information. Even for MVP:
 
 ---
 
+## Body Image Assessment Protocol (BIDS)
+
+### Overview
+
+The Body Image Discrepancy Score (BIDS) protocol is the core clinical feature of ReCompose. It uses the existing 3D body morphing interface as a perceptual assessment instrument — participants adjust the avatar to match their body perception, and the system quantifies the gap between perception and reality.
+
+This methodology is validated in published literature: mobile digital imaging analysis (DIA) platforms using 3D avatars adjustable by body fat percentage have demonstrated strong validity (r = .96 correlation with DXA-derived body fat) for body image distortion and dissatisfaction assessment.
+
+### Three-Task Protocol
+
+Each assessment consists of three sequential tasks using the same viewer and slider controls:
+
+| Task | Instruction | What It Measures |
+|------|-------------|-----------------|
+| **Perceived** | "Adjust the body to match how you believe your body currently looks." | Body image accuracy / distortion |
+| **Ideal** | "Adjust the body to show your ideal body — how you would most like to look." | Body image dissatisfaction |
+| **Partner** | "Adjust the body to show what a romantic partner would find most attractive." | Internalized attractiveness norms |
+
+Each task starts with the avatar reset to the actual scan values. The participant uses the global BF% slider and/or the six regional segment sliders. Upon confirmation, the system records the final slider state, full adjustment trajectory (timestamped slider events), task duration, and reset count.
+
+### Scoring Model
+
+Three primary scores, all in body fat percentage units:
+
+```
+BIDS-D (Distortion) = perceived.globalBF - actual.BF
+  Positive → participant perceives body as fatter than actual
+  Negative → participant perceives body as thinner than actual
+
+BIDS-S (Dissatisfaction) = ideal.globalBF - perceived.globalBF
+  Negative → participant desires thinner body than perceived
+  Positive → participant desires larger body than perceived
+
+BIDS-P (Partner Discrepancy) = partner.globalBF - perceived.globalBF
+  Measures gap between self-perception and perceived external standards
+```
+
+Additionally, **per-segment distortion** is calculated from the six regional slider values, revealing which body regions drive the distortion (e.g., waist-focused distortion suggests central adiposity concern).
+
+### Clinical Thresholds (Preliminary)
+
+| Magnitude (|BIDS-D|) | Interpretation |
+|---|---|
+| 0–2 BF% | Normal range — minor perceptual variance |
+| 2–5 BF% | Mild distortion — may warrant monitoring |
+| 5–10 BF% | Moderate distortion — clinical flag |
+| >10 BF% | Severe distortion — strong indicator for further assessment |
+
+**These thresholds are initial estimates and must be calibrated through validation studies.** The threshold value should be stored as a configurable constant.
+
+### Data Schema
+
+```typescript
+interface AssessmentRecord {
+  id: string;                          // UUID
+  timestamp: string;                   // ISO 8601
+  scanId: string;
+
+  actual: {
+    bodyFat: number;
+    weight: number;
+    bmi: number;
+    waistCirc: number;
+    hipCirc: number;
+    whr: number;
+  };
+
+  tasks: {
+    perceived: TaskResult;
+    ideal: TaskResult;
+    partner: TaskResult;
+  };
+
+  scores: BIDSScores;
+}
+
+interface TaskResult {
+  taskType: 'perceived' | 'ideal' | 'partner';
+  finalState: {
+    globalBodyFat: number;
+    segmentOverrides: Record<string, number>;  // shoulders, arms, torso, waist, hips, legs
+  };
+  adjustmentTrajectory: AdjustmentEvent[];
+  durationMs: number;
+  resetCount: number;
+}
+
+interface AdjustmentEvent {
+  timestamp: number;      // ms since task start
+  control: string;        // 'global' | segment name
+  value: number;
+}
+
+interface BIDSScores {
+  distortion: number;
+  dissatisfaction: number;
+  partnerDiscrepancy: number;
+  distortionMagnitude: number;
+  dissatisfactionMagnitude: number;
+  segmentDistortions: Array<{
+    segmentId: string;
+    label: string;
+    perceivedDelta: number;
+    idealDelta: number;
+    partnerDelta: number;
+  }>;
+  maxDistortionSegment: string;
+  maxDissatisfactionSegment: string;
+  perceivedTaskDuration: number;
+  idealTaskDuration: number;
+  partnerTaskDuration: number;
+  totalAssessmentDuration: number;
+  clinicalFlag: boolean;
+}
+```
+
+### Assessment Mode UI Behavior
+
+When assessment mode is active:
+- **Hide** the metrics panel (weight, BMI, WHR, etc.) to prevent numerical anchoring
+- **Show** progress indicator (3 steps), instruction card, confirm button
+- **Show** "Reset to Actual" button for each task
+- **Disable** auto-rotate on orbit controls
+- All morph controls (global slider, regional sliders, camera presets) remain fully functional
+- After all three tasks: show results summary with captured 3D renders, scores, and regional breakdown
+
+### Output Artifacts
+
+1. **In-app results summary** — scores, 3D render comparison, regional breakdown, clinical flag
+2. **PDF report** — professional clinical document suitable for medical records
+3. **JSON export** — full AssessmentRecord including adjustment trajectories
+4. **CSV export** — scores table for statistical analysis
+
+### File Structure Additions
+
+```
+lib/
+  assessment/
+    scoring.ts              # BIDS calculation logic
+    assessmentProtocol.ts   # Task sequencing and flow management
+    reportGenerator.ts      # PDF report creation
+    dataExport.ts           # JSON/CSV export utilities
+  stores/
+    assessmentStore.ts      # Zustand store for assessment state
+components/
+  assessment/
+    AssessmentWelcome.tsx    # Consent/intro screen
+    AssessmentProgress.tsx   # Step indicator (1/2/3)
+    TaskInstructions.tsx     # Per-task instruction card
+    ConfirmButton.tsx        # Task confirmation with micro-animation
+    ResultsSummary.tsx       # Post-assessment scores + renders
+    ScoreCard.tsx            # Individual score display component
+    RegionalBreakdown.tsx    # Segment-level distortion visualization
+    ReportDownload.tsx       # PDF + data export buttons
+```
+
+### Privacy & Ethics
+
+- All assessment data is processed and stored client-side only (MVP)
+- No biometric data is transmitted to external servers
+- Participant should provide informed consent before starting assessment
+- The assessment is not a diagnostic tool — it is a measurement instrument
+- Clinical flag thresholds are preliminary and should not be used for diagnosis without clinician interpretation
+- Consider adding: "If you are experiencing distress about your body image, please speak with a healthcare professional" in the results screen
+
 ## References
 
 - Amazon Halo Body (discontinued 2023) — original "Future Me"
@@ -578,6 +743,10 @@ Body scan data is sensitive biometric information. Even for MVP:
 - SlicerMorph — 3D Slicer geometric morphometrics extension
 - SMPL/SMPL-X — parametric human body model (reference, not used directly)
 - Fit3D ProScanner / Styku S100 — common .obj scan sources
+
+---
+
+*This document is the single source of truth for ReCompose. Update as decisions evolve.*
 
 ---
 
