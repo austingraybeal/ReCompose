@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { SMPLModelData } from '@/types/smpl';
-import type { SMPLConstraints } from '@/lib/smpl/constraints';
-import { computeConstraints } from '@/lib/smpl/constraints';
+import type { DisplacementField } from '@/lib/smpl/displacementField';
+import { buildDisplacementFields } from '@/lib/smpl/displacementField';
 import { loadSMPLFromURL } from '@/lib/smpl/loader';
 
 export type SMPLGender = 'male' | 'female' | 'neutral';
@@ -16,8 +16,8 @@ const SMPL_MODEL_URLS: Record<SMPLGender, string> = {
 interface SMPLState {
   /** Loaded SMPL model data */
   modelData: SMPLModelData | null;
-  /** SMPL-derived constraints for the morph engine */
-  constraints: SMPLConstraints | null;
+  /** Pre-computed displacement field for the morph engine */
+  displacementField: DisplacementField | null;
   /** Whether the SMPL model is currently loading */
   isLoading: boolean;
   /** Currently selected gender */
@@ -35,7 +35,7 @@ interface SMPLState {
 
 export const useSmplStore = create<SMPLState>((set, get) => ({
   modelData: null,
-  constraints: null,
+  displacementField: null,
   isLoading: false,
   gender: 'male',
   availableGenders: new Set(),
@@ -49,12 +49,12 @@ export const useSmplStore = create<SMPLState>((set, get) => ({
 
     try {
       const data = await loadSMPLFromURL(SMPL_MODEL_URLS[gender]);
-      const constraints = computeConstraints(data);
+      const field = buildDisplacementFields(data);
       const available = new Set(get().availableGenders);
       available.add(gender);
-      set({ modelData: data, constraints, isLoading: false, availableGenders: available });
+      set({ modelData: data, displacementField: field, isLoading: false, availableGenders: available });
     } catch {
-      set({ isLoading: false, constraints: null });
+      set({ isLoading: false, displacementField: null });
     }
   },
 
@@ -88,8 +88,8 @@ export const useSmplStore = create<SMPLState>((set, get) => ({
     if (defaultGender) {
       try {
         const data = await loadSMPLFromURL(SMPL_MODEL_URLS[defaultGender]);
-        const constraints = computeConstraints(data);
-        set({ modelData: data, constraints, isLoading: false, gender: defaultGender });
+        const field = buildDisplacementFields(data);
+        set({ modelData: data, displacementField: field, isLoading: false, gender: defaultGender });
       } catch {
         set({ isLoading: false });
       }

@@ -16,7 +16,7 @@ const GENDER_OPTIONS: { id: SMPLGender; label: string }[] = [
 export default function SMPLModelLoader() {
   const isLoading = useSmplStore((s) => s.isLoading);
   const gender = useSmplStore((s) => s.gender);
-  const constraints = useSmplStore((s) => s.constraints);
+  const displacementField = useSmplStore((s) => s.displacementField);
   const availableGenders = useSmplStore((s) => s.availableGenders);
   const setGender = useSmplStore((s) => s.setGender);
 
@@ -36,7 +36,7 @@ export default function SMPLModelLoader() {
       <div className="flex gap-1.5">
         {GENDER_OPTIONS.map((opt) => {
           const available = availableGenders.has(opt.id);
-          const active = gender === opt.id && constraints !== null;
+          const active = gender === opt.id && displacementField !== null;
           return (
             <button
               key={opt.id}

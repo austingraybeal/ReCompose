@@ -24,7 +24,8 @@ const SEGMENT_COLORS: Record<string, Color> = {
 export default function BodyMesh() {
   const meshRef = useRef<Mesh>(null);
   const scanData = useScanStore((s) => s.scanData);
-  const smplConstraints = useSmplStore((s) => s.constraints);
+  const displacementField = useSmplStore((s) => s.displacementField);
+  const modelData = useSmplStore((s) => s.modelData);
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
   const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
@@ -58,7 +59,8 @@ export default function BodyMesh() {
       deltaBodyFat,
       segmentOverrides,
       scanData.adjacency,
-      smplConstraints
+      displacementField,
+      modelData
     );
 
     positions.needsUpdate = true;
