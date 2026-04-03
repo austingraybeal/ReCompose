@@ -1,60 +1,102 @@
 import type { LandmarkRing, VertexBinding, SegmentOverrides, SegmentId } from '@/types/scan';
 import { RING_SENSITIVITY, ARM_SENSITIVITY } from './sensitivityModel';
-import { cubicInterpolate, angularScale } from './ringInterpolation';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 
 /**
- * Compute the combined scale for a given ring.
+ * Build a continuous sensitivity curve from discrete ring samples.
+ * Returns a function: normalizedY → sensitivity value.
  *
- * @param ringName - Ring identifier
- * @param segmentId - Owning segment
- * @param deltaBodyFat - Current BF minus original BF
- * @param overrides - Per-segment slider values
- * @returns Scale factor (1.0 = no change)
+ * Uses linear interpolation between ring heights for smooth results.
+ * Rings must be sorted by height (descending).
  */
-function ringScale(
-  ringName: string,
-  segmentId: SegmentId,
-  deltaBodyFat: number,
-  overrides: SegmentOverrides
-): number {
-  const sensitivity = RING_SENSITIVITY[ringName] ?? 0;
-  const global = 1 + (deltaBodyFat * sensitivity / 100);
-  const regional = 1 + (overrides[segmentId] / 100);
-  return global * regional;
-}
+function buildSensitivityCurve(rings: LandmarkRing[]): (y: number) => number {
+  if (rings.length === 0) return () => 0;
 
-/**
- * Get the segment that owns a ring by checking segment definitions.
- */
-function ringOwnerSegment(ring: LandmarkRing): SegmentId {
-  for (const seg of SEGMENTS) {
-    if (seg.rings.includes(ring.name)) return seg.id;
+  // Build sorted (ascending) height→sensitivity pairs
+  const samples: { y: number; s: number }[] = [];
+  for (const ring of rings) {
+    const s = RING_SENSITIVITY[ring.name] ?? 0;
+    samples.push({ y: ring.height, s });
   }
-  // Fallback by normalized height (0-1 range)
-  if (ring.height >= 0.66) return 'shoulders';
-  if (ring.height >= 0.59) return 'torso';
-  if (ring.height >= 0.48) return 'waist';
-  if (ring.height >= 0.39) return 'hips';
-  return 'legs';
+  samples.sort((a, b) => a.y - b.y);
+
+  return (y: number): number => {
+    if (samples.length === 0) return 0;
+    if (y <= samples[0].y) return samples[0].s;
+    if (y >= samples[samples.length - 1].y) return samples[samples.length - 1].s;
+
+    // Find bounding samples
+    for (let i = 0; i < samples.length - 1; i++) {
+      if (y >= samples[i].y && y <= samples[i + 1].y) {
+        const range = samples[i + 1].y - samples[i].y;
+        const t = range > 0 ? (y - samples[i].y) / range : 0;
+        // Smooth step interpolation
+        const st = t * t * (3 - 2 * t);
+        return samples[i].s + (samples[i + 1].s - samples[i].s) * st;
+      }
+    }
+    return 0;
+  };
 }
 
 /**
- * Main deformation function. Modifies vertex positions in-place.
+ * Compute per-segment Gaussian influence at a given normalized Y height.
+ * Returns an object mapping segment ID to its influence weight (0-1).
+ * Segment with the strongest influence gets the most override effect.
+ */
+function segmentInfluence(y: number): Record<SegmentId, number> {
+  const result: Record<string, number> = {};
+  for (const seg of SEGMENTS) {
+    if (seg.isLateral) continue;
+    const dist = y - seg.yCenter;
+    const weight = Math.exp(-(dist * dist) / (2 * seg.sigma * seg.sigma));
+    result[seg.id] = weight;
+  }
+  return result as Record<SegmentId, number>;
+}
+
+/**
+ * Compute the angular scaling multiplier based on radial direction.
+ * Front (anterior, +Z) gets 1.15x, back (posterior, -Z) gets 0.90x.
  *
- * Uses a center-axis approach instead of per-ring-center displacement to
- * eliminate banding artifacts. All vertices are displaced radially from a
- * smooth center axis, scaled by interpolated ring sensitivity.
+ * @param dx - X displacement from center
+ * @param dz - Z displacement from center
+ * @param scale - Base scale factor
+ */
+function directionalScale(dx: number, dz: number, scale: number): number {
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist < 0.0001) return scale;
+
+  // Z component of normalized direction: positive = front, negative = back
+  const zNorm = dz / dist;
+
+  let multiplier: number;
+  if (zNorm >= 0) {
+    multiplier = 1.0 + 0.15 * zNorm; // up to 1.15 at pure front
+  } else {
+    multiplier = 1.0 + 0.10 * zNorm; // down to 0.90 at pure back
+  }
+
+  return scale * multiplier;
+}
+
+/**
+ * Main deformation function. Uses continuous height-based scaling with
+ * Gaussian segment influence — no discrete rings or banding.
  *
- * For arm vertices, displacement is computed from a local arm center axis
- * so arms scale volumetrically (thicken + lengthen) rather than just widening.
+ * For each vertex:
+ *  1. Sample the continuous sensitivity curve at vertex Y height
+ *  2. Compute global scale from sensitivity * deltaBodyFat
+ *  3. Blend ALL segment overrides using Gaussian influence at vertex height
+ *  4. Apply directional scaling (front bias)
+ *  5. Displace radially from center axis
  *
- * @param positions - The Float32Array of current vertex positions to modify
- * @param originalPositions - The original (undeformed) vertex positions
+ * @param positions - Float32Array to modify
+ * @param originalPositions - Undeformed vertex positions
  * @param bindings - Per-vertex classification data
- * @param rings - Landmark rings sorted by height (in normalized space)
- * @param deltaBodyFat - Global slider delta (currentBF - originalBF)
- * @param overrides - Per-segment override values (-50 to +50)
+ * @param rings - Landmark rings in normalized space
+ * @param deltaBodyFat - Current BF minus original BF
+ * @param overrides - Per-segment slider values (-50 to +50)
  */
 export function deformMesh(
   positions: Float32Array,
@@ -66,115 +108,103 @@ export function deformMesh(
 ): void {
   if (rings.length === 0) return;
 
-  // Compute a smooth center axis (average of all ring centers)
-  let axisCenterX = 0;
-  let axisCenterZ = 0;
+  // Build continuous sensitivity curve
+  const getSensitivity = buildSensitivityCurve(rings);
+
+  // Compute center axis (average of ring centers X, Z)
+  let axisCX = 0, axisCZ = 0;
   for (const ring of rings) {
-    axisCenterX += ring.center.x;
-    axisCenterZ += ring.center.z;
+    axisCX += ring.center.x;
+    axisCZ += ring.center.z;
   }
-  axisCenterX /= rings.length;
-  axisCenterZ /= rings.length;
+  axisCX /= rings.length;
+  axisCZ /= rings.length;
 
-  // Precompute per-ring scale factors
-  const ringScales = rings.map(ring => {
-    const segId = ringOwnerSegment(ring);
-    return ringScale(ring.name, segId, deltaBodyFat, overrides);
-  });
-
-  // Arm scale
-  const armGlobal = 1 + (deltaBodyFat * ARM_SENSITIVITY / 100);
-  const armRegional = 1 + (overrides.arms / 100);
-  const armScaleFactor = armGlobal * armRegional;
-
-  // Precompute arm center axes (left and right) from arm vertices
-  let leftArmSumX = 0, leftArmSumZ = 0, leftArmCount = 0;
-  let rightArmSumX = 0, rightArmSumZ = 0, rightArmCount = 0;
+  // Precompute arm centers
   const vertexCount = originalPositions.length / 3;
+  let lArmX = 0, lArmZ = 0, lCount = 0;
+  let rArmX = 0, rArmZ = 0, rCount = 0;
 
   for (let i = 0; i < vertexCount; i++) {
-    const binding = bindings[i];
-    if (!binding || binding.segmentId !== 'arms') continue;
+    if (bindings[i]?.segmentId !== 'arms') continue;
     const ox = originalPositions[i * 3];
-    if (ox < axisCenterX) {
-      leftArmSumX += ox;
-      leftArmSumZ += originalPositions[i * 3 + 2];
-      leftArmCount++;
+    if (ox < axisCX) {
+      lArmX += ox; lArmZ += originalPositions[i * 3 + 2]; lCount++;
     } else {
-      rightArmSumX += ox;
-      rightArmSumZ += originalPositions[i * 3 + 2];
-      rightArmCount++;
+      rArmX += ox; rArmZ += originalPositions[i * 3 + 2]; rCount++;
     }
   }
+  const leftCX = lCount > 0 ? lArmX / lCount : axisCX - 0.12;
+  const leftCZ = lCount > 0 ? lArmZ / lCount : axisCZ;
+  const rightCX = rCount > 0 ? rArmX / rCount : axisCX + 0.12;
+  const rightCZ = rCount > 0 ? rArmZ / rCount : axisCZ;
 
-  const leftArmCX = leftArmCount > 0 ? leftArmSumX / leftArmCount : axisCenterX - 0.15;
-  const leftArmCZ = leftArmCount > 0 ? leftArmSumZ / leftArmCount : axisCenterZ;
-  const rightArmCX = rightArmCount > 0 ? rightArmSumX / rightArmCount : axisCenterX + 0.15;
-  const rightArmCZ = rightArmCount > 0 ? rightArmSumZ / rightArmCount : axisCenterZ;
+  // Arm global scale
+  const armGlobalScale = 1 + (deltaBodyFat * ARM_SENSITIVITY / 100);
+  const armRegionalScale = 1 + (overrides.arms / 100);
+  const armScale = armGlobalScale * armRegionalScale;
 
   for (let i = 0; i < vertexCount; i++) {
     const binding = bindings[i];
-    if (!binding) {
-      positions[i * 3] = originalPositions[i * 3];
-      positions[i * 3 + 1] = originalPositions[i * 3 + 1];
-      positions[i * 3 + 2] = originalPositions[i * 3 + 2];
-      continue;
-    }
-
     const ox = originalPositions[i * 3];
     const oy = originalPositions[i * 3 + 1];
     const oz = originalPositions[i * 3 + 2];
 
-    let combinedScale: number;
-    let cx: number;
-    let cz: number;
-
-    if (binding.segmentId === 'arms') {
-      combinedScale = armScaleFactor;
-      // Use local arm center for volumetric scaling
-      if (ox < axisCenterX) {
-        cx = leftArmCX;
-        cz = leftArmCZ;
-      } else {
-        cx = rightArmCX;
-        cz = rightArmCZ;
-      }
-    } else {
-      // Interpolate scale between bounding rings
-      const scaleAbove = ringScales[binding.ringAboveIdx] ?? 1;
-      const scaleBelow = ringScales[binding.ringBelowIdx] ?? 1;
-      combinedScale = cubicInterpolate(binding.ringWeight, scaleBelow, scaleAbove);
-
-      // Blend with adjacent segment in transition zone
-      if (binding.blendWeight > 0 && binding.blendSegmentId) {
-        const blendSeg = binding.blendSegmentId as SegmentId;
-        const blendIdx = binding.ringWeight >= 0.5 ? binding.ringAboveIdx : binding.ringBelowIdx;
-        const blendRingScale = ringScales[blendIdx] ?? 1;
-        const blendRegional = 1 + (overrides[blendSeg] / 100);
-        const primaryRegional = 1 + (overrides[binding.segmentId as SegmentId] / 100);
-        const adjustedBlendScale = primaryRegional > 0
-          ? blendRingScale / primaryRegional * blendRegional
-          : blendRingScale;
-        combinedScale = cubicInterpolate(binding.blendWeight, combinedScale, adjustedBlendScale);
-      }
-
-      // Use the smooth center axis for all body vertices
-      cx = axisCenterX;
-      cz = axisCenterZ;
+    if (!binding) {
+      positions[i * 3] = ox;
+      positions[i * 3 + 1] = oy;
+      positions[i * 3 + 2] = oz;
+      continue;
     }
 
-    // Radial displacement from center axis
+    let cx: number, cz: number, combinedScale: number;
+
+    if (binding.segmentId === 'arms') {
+      // Arms: scale from local arm center axis
+      if (ox < axisCX) { cx = leftCX; cz = leftCZ; }
+      else { cx = rightCX; cz = rightCZ; }
+      combinedScale = armScale;
+    } else {
+      // Body: continuous height-based scaling
+      cx = axisCX;
+      cz = axisCZ;
+
+      // 1. Global scale from sensitivity curve
+      const sensitivity = getSensitivity(oy);
+      const globalScale = 1 + (deltaBodyFat * sensitivity / 100);
+
+      // 2. Regional overrides with Gaussian influence blending
+      // Each segment contributes proportionally to its Gaussian weight
+      const influence = segmentInfluence(oy);
+      let totalWeight = 0;
+      let blendedOverride = 0;
+
+      for (const seg of SEGMENTS) {
+        if (seg.isLateral) continue;
+        const w = influence[seg.id] ?? 0;
+        if (w > 0.001) {
+          blendedOverride += overrides[seg.id] * w;
+          totalWeight += w;
+        }
+      }
+
+      const regionalScale = totalWeight > 0
+        ? 1 + (blendedOverride / totalWeight) / 100
+        : 1;
+
+      combinedScale = globalScale * regionalScale;
+    }
+
+    // Radial displacement from center
     const dx = ox - cx;
     const dz = oz - cz;
     const dist = Math.sqrt(dx * dx + dz * dz);
 
     if (dist > 0.0001) {
-      // Apply angular scaling (front bias)
-      const directionalScale = angularScale(binding.radialAngle, combinedScale);
-      const newDist = dist * directionalScale;
-      const ratio = newDist / dist;
+      const finalScale = directionalScale(dx, dz, combinedScale);
+      const ratio = finalScale;
       positions[i * 3] = cx + dx * ratio;
-      positions[i * 3 + 1] = oy; // Y unchanged
+      positions[i * 3 + 1] = oy;
       positions[i * 3 + 2] = cz + dz * ratio;
     } else {
       positions[i * 3] = ox;

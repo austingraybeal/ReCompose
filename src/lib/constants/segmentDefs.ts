@@ -6,7 +6,12 @@ export interface SegmentDef {
   icon: string;
   rings: string[];
   color: string;
+  /** Normalized Y range (0-1, where 1 = top of head) */
   yRange: [number, number];
+  /** Center of the segment in normalized Y for Gaussian influence */
+  yCenter: number;
+  /** Width of Gaussian influence (sigma) in normalized Y */
+  sigma: number;
   isLateral?: boolean;
 }
 
@@ -17,7 +22,9 @@ export const SEGMENTS: SegmentDef[] = [
     icon: '\u{1F9B4}',
     rings: ['Collar', 'OverArm'],
     color: 'var(--rc-seg-shoulders)',
-    yRange: [1180, 1380],
+    yRange: [0.66, 0.82],
+    yCenter: 0.74,
+    sigma: 0.06,
   },
   {
     id: 'arms',
@@ -25,7 +32,9 @@ export const SEGMENTS: SegmentDef[] = [
     icon: '\u{1F4AA}',
     rings: [],
     color: 'var(--rc-seg-arms)',
-    yRange: [0, 1280],
+    yRange: [0.05, 0.74],
+    yCenter: 0.45,
+    sigma: 0.15,
     isLateral: true,
   },
   {
@@ -34,7 +43,9 @@ export const SEGMENTS: SegmentDef[] = [
     icon: '\u{1FAC1}',
     rings: ['Bust', 'BustWithDrop', 'UnderBust'],
     color: 'var(--rc-seg-torso)',
-    yRange: [1070, 1180],
+    yRange: [0.59, 0.66],
+    yCenter: 0.62,
+    sigma: 0.05,
   },
   {
     id: 'waist',
@@ -42,7 +53,9 @@ export const SEGMENTS: SegmentDef[] = [
     icon: '\u{2B55}',
     rings: ['Waist', 'WaistAt50', 'StomachFP', 'StomachMax', 'Abdomen'],
     color: 'var(--rc-seg-waist)',
-    yRange: [860, 1070],
+    yRange: [0.48, 0.59],
+    yCenter: 0.535,
+    sigma: 0.05,
   },
   {
     id: 'hips',
@@ -50,25 +63,18 @@ export const SEGMENTS: SegmentDef[] = [
     icon: '\u{1F351}',
     rings: ['Seat', 'Hip', 'HipWidest'],
     color: 'var(--rc-seg-hips)',
-    yRange: [700, 860],
+    yRange: [0.39, 0.48],
+    yCenter: 0.435,
+    sigma: 0.04,
   },
   {
-    id: 'thighs',
-    label: 'Thighs',
+    id: 'legs',
+    label: 'Legs',
     icon: '\u{1F9B5}',
     rings: [
       'UpperLeftThigh', 'UpperRightThigh',
       'MidLeftThigh', 'MidRightThigh',
       'ActualMidLeftThigh', 'ActualMidRightThigh',
-    ],
-    color: 'var(--rc-seg-thighs)',
-    yRange: [480, 700],
-  },
-  {
-    id: 'legs',
-    label: 'Lower Legs',
-    icon: '\u{1F9E6}',
-    rings: [
       'KneeLeftLeg', 'KneeRightLeg',
       'ActualKneeLeftLeg', 'ActualKneeRightLeg',
       'UnderKneeLeftLeg', 'UnderKneeRightLeg',
@@ -77,7 +83,9 @@ export const SEGMENTS: SegmentDef[] = [
       'ActualAnkleLeftLeg', 'ActualAnkleRightLeg',
     ],
     color: 'var(--rc-seg-legs)',
-    yRange: [0, 480],
+    yRange: [0.0, 0.39],
+    yCenter: 0.20,
+    sigma: 0.12,
   },
 ];
 

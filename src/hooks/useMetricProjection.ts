@@ -33,7 +33,7 @@ export function useMetricProjection(): {
 
   const originalMetrics = useMemo(() => {
     if (!scanData) return null;
-    const zeroOverrides = { shoulders: 0, arms: 0, torso: 0, waist: 0, hips: 0, thighs: 0, legs: 0 };
+    const zeroOverrides = { shoulders: 0, arms: 0, torso: 0, waist: 0, hips: 0, legs: 0 };
     return projectMetrics(
       scanData.bodyComp,
       originalBodyFat,

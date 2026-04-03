@@ -19,11 +19,10 @@ export const SEGMENT_COLORS: Record<string, string> = {
   torso: '#4acfa0',
   waist: '#f0c84a',
   hips: '#f0764a',
-  thighs: '#e879a8',
   legs: '#a78bfa',
 } as const;
 
-/** Material color for the body mesh (neutral warm skin tone) */
-export const MESH_COLOR = '#c4a882';
+/** Material color for the body mesh (cool-toned to match dark UI) */
+export const MESH_COLOR = '#8b9eb0';
 export const GHOST_COLOR = '#3ecfb4';
 export const GHOST_OPACITY = 0.15;
