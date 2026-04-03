@@ -5,7 +5,6 @@ import { useFrame } from '@react-three/fiber';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useViewStore } from '@/lib/stores/viewStore';
-import { useSmplStore } from '@/lib/stores/smplStore';
 import { deformMesh } from '@/lib/morph/morphEngine';
 import type { Mesh, Intersection } from 'three';
 import { Color, BufferAttribute } from 'three';
@@ -24,8 +23,6 @@ const SEGMENT_COLORS: Record<string, Color> = {
 export default function BodyMesh() {
   const meshRef = useRef<Mesh>(null);
   const scanData = useScanStore((s) => s.scanData);
-  const displacementField = useSmplStore((s) => s.displacementField);
-  const modelData = useSmplStore((s) => s.modelData);
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
   const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
@@ -58,9 +55,7 @@ export default function BodyMesh() {
       scanData.rings,
       deltaBodyFat,
       segmentOverrides,
-      scanData.adjacency,
-      displacementField,
-      modelData
+      scanData.adjacency
     );
 
     positions.needsUpdate = true;
