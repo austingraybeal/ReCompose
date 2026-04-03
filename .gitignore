@@ -32,3 +32,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# SMPL model data (large, extracted from licensed .pkl files)
+public/models/*.json
+# Keep the .pkl files out too
+*.pkl

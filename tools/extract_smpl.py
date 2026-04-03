@@ -3,11 +3,15 @@
 Extract SMPL / SMPL-X model data from .pkl to browser-friendly JSON.
 
 Usage:
-    python extract_smpl.py <model.pkl> [--output model.json] [--components 10]
+    python tools/extract_smpl.py <model.pkl> [--output path.json] [--components 10]
+
+By default, outputs to public/models/smpl_neutral.json so the app auto-loads it.
+
+Example:
+    python tools/extract_smpl.py ~/Downloads/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl
 
 This reads the standard SMPL .pkl format (as distributed by MPI) and outputs
-a JSON file with base64-encoded typed arrays that can be loaded directly in
-the browser.
+a JSON file with base64-encoded typed arrays that the app fetches on boot.
 
 Requirements:
     pip install numpy
@@ -154,7 +158,9 @@ def main():
         print(f"Error: {pkl_path} not found", file=sys.stderr)
         sys.exit(1)
 
-    output_path = args.output or str(pkl_path.with_suffix(".json"))
+    # Default: output to public/models/ for auto-loading by the app
+    default_output = Path(__file__).parent.parent / "public" / "models" / "smpl_neutral.json"
+    output_path = args.output or str(default_output)
 
     print(f"Extracting {pkl_path} ...")
     data = extract(str(pkl_path), args.components, args.gender)
