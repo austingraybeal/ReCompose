@@ -24,7 +24,8 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-shoulders)',
     yRange: [0.66, 0.82],
     yCenter: 0.74,
-    sigma: 0.08,
+    // Wide sigma so shoulder changes blend smoothly into torso and arms
+    sigma: 0.14,
   },
   {
     id: 'arms',
@@ -45,7 +46,8 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-torso)',
     yRange: [0.59, 0.66],
     yCenter: 0.62,
-    sigma: 0.08,
+    // Wide sigma so torso blends into shoulders above and waist below
+    sigma: 0.12,
   },
   {
     id: 'waist',
@@ -55,7 +57,8 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-waist)',
     yRange: [0.48, 0.59],
     yCenter: 0.535,
-    sigma: 0.08,
+    // Wide sigma — waist influence should blend into hips and torso
+    sigma: 0.12,
   },
   {
     id: 'hips',
@@ -65,7 +68,8 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-hips)',
     yRange: [0.39, 0.48],
     yCenter: 0.435,
-    sigma: 0.08,
+    // VERY wide sigma to prevent holes at hip boundaries
+    sigma: 0.14,
   },
   {
     id: 'legs',
@@ -85,7 +89,8 @@ export const SEGMENTS: SegmentDef[] = [
     color: 'var(--rc-seg-legs)',
     yRange: [0.0, 0.39],
     yCenter: 0.20,
-    sigma: 0.14,
+    // Wide sigma — legs should blend smoothly into hips
+    sigma: 0.18,
   },
 ];
 

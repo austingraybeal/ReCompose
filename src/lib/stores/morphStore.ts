@@ -31,12 +31,8 @@ export const useMorphStore = create<MorphState>((set) => ({
 
   setOriginalBodyFat: (bf) => set({ originalBodyFat: bf, globalBodyFat: bf }),
 
-  setGlobalBodyFat: (bf) => set((state) => {
-    if (state.lockProportional) {
-      return { globalBodyFat: bf, segmentOverrides: { ...DEFAULT_OVERRIDES } };
-    }
-    return { globalBodyFat: bf };
-  }),
+  // Global slider NEVER resets segment overrides — both apply additively
+  setGlobalBodyFat: (bf) => set({ globalBodyFat: bf }),
 
   setSegmentOverride: (segment, value) => set((state) => ({
     segmentOverrides: { ...state.segmentOverrides, [segment]: value },

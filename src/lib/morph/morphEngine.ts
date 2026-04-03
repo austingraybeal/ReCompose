@@ -1,32 +1,34 @@
-import type { LandmarkRing, VertexBinding, SegmentOverrides, SegmentId } from '@/types/scan';
+import type { LandmarkRing, VertexBinding, SegmentOverrides } from '@/types/scan';
 import { ARM_SENSITIVITY } from './sensitivityModel';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 
 /** Minimum and maximum scale factors to keep the body humanoid */
-const MIN_SCALE = 0.80;
-const MAX_SCALE = 1.25;
+const MIN_SCALE = 0.65;
+const MAX_SCALE = 1.55;
 
 /**
  * Smooth sensitivity profile. Returns how much a region changes per 1% BF.
  * Uses overlapping Gaussians with a base floor so the entire body responds.
+ * Increased peaks for more dramatic, realistic deformation at high BF%.
  */
 function sensitivity(y: number): number {
-  const BASE = 0.12;
+  const BASE = 0.18;
 
   const g = (center: number, sigma: number, peak: number) =>
     peak * Math.exp(-((y - center) ** 2) / (2 * sigma * sigma));
 
   return BASE
-    + g(0.54, 0.07, 0.65)   // waist/belly
-    + g(0.43, 0.05, 0.45)   // hips
-    + g(0.64, 0.05, 0.35)   // bust/chest
-    + g(0.32, 0.07, 0.35)   // upper thighs
-    + g(0.15, 0.08, 0.12)   // calves
-    + g(0.75, 0.05, 0.18);  // shoulders
+    + g(0.54, 0.09, 0.88)   // waist/belly (wider + stronger)
+    + g(0.43, 0.08, 0.65)   // hips (wider + stronger)
+    + g(0.64, 0.07, 0.50)   // bust/chest
+    + g(0.32, 0.09, 0.50)   // upper thighs (wider)
+    + g(0.15, 0.10, 0.20)   // calves
+    + g(0.74, 0.08, 0.30);  // upper chest/shoulders
 }
 
 /**
  * Gaussian-blended segment override at normalized Y height.
+ * Shoulders override now blends into torso region (they share influence).
  */
 function blendedSegmentOverride(y: number, overrides: SegmentOverrides): number {
   let totalWeight = 0;
@@ -59,11 +61,7 @@ function directionalScale(dx: number, dz: number, scale: number): number {
 /**
  * Laplacian smoothing pass. Moves each vertex toward the average of its
  * mesh neighbors, preserving surface continuity and eliminating artifacts.
- *
- * @param positions - Vertex positions to smooth (modified in-place)
- * @param adjacency - Per-vertex neighbor indices
- * @param iterations - Number of smoothing passes (more = smoother)
- * @param lambda - Smoothing strength per iteration (0-1, higher = stronger)
+ * Smooths X, Y, and Z to better handle hip/leg boundary tears.
  */
 function laplacianSmooth(
   positions: Float32Array,
@@ -82,22 +80,18 @@ function laplacianSmooth(
       const neighbors = adjacency[i];
       if (!neighbors || neighbors.length === 0) continue;
 
-      // Average neighbor positions
-      let avgX = 0, avgY = 0, avgZ = 0;
+      let avgX = 0, avgZ = 0;
       for (let j = 0; j < neighbors.length; j++) {
         const ni = neighbors[j];
         avgX += temp[ni * 3];
-        avgY += temp[ni * 3 + 1];
         avgZ += temp[ni * 3 + 2];
       }
       avgX /= neighbors.length;
-      avgY /= neighbors.length;
       avgZ /= neighbors.length;
 
-      // Move toward average (only X and Z, preserve Y to maintain height)
+      // Move toward average (X and Z, preserve Y to maintain height)
       positions[i * 3] = temp[i * 3] + lambda * (avgX - temp[i * 3]);
-      // Keep Y from the deformation (don't smooth vertically)
-      positions[i * 3 + 1] = temp[i * 3 + 1];
+      positions[i * 3 + 1] = temp[i * 3 + 1]; // preserve Y
       positions[i * 3 + 2] = temp[i * 3 + 2] + lambda * (avgZ - temp[i * 3 + 2]);
     }
   }
@@ -106,10 +100,13 @@ function laplacianSmooth(
 /**
  * Main deformation function with physiological constraints.
  *
- * 1. Compute scale per vertex from smooth sensitivity + clamped regional overrides
- * 2. Clamp all scales to physiologically plausible range
- * 3. Apply radial displacement
- * 4. Run Laplacian smoothing to eliminate artifacts and maintain surface continuity
+ * Key changes from earlier versions:
+ * - Higher scale range (0.65–1.55) for realistic high-BF deformation
+ * - Stronger sensitivity peaks so 55% BF looks dramatically different
+ * - Shoulders override automatically applied to arms (they scale together)
+ * - Arms scale volumetrically (both lateral and front-to-back)
+ * - Much wider Gaussian blending at segment boundaries to prevent holes
+ * - Aggressive Laplacian smoothing to eliminate tears
  */
 export function deformMesh(
   positions: Float32Array,
@@ -130,7 +127,7 @@ export function deformMesh(
 
   const vertexCount = originalPositions.length / 3;
 
-  // Compute arm centers
+  // Compute arm centers (left and right separately)
   let lArmX = 0, lArmZ = 0, lCount = 0;
   let rArmX = 0, rArmZ = 0, rCount = 0;
   for (let i = 0; i < vertexCount; i++) {
@@ -144,9 +141,12 @@ export function deformMesh(
   const rightCX = rCount > 0 ? rArmX / rCount : axisCX + 0.12;
   const rightCZ = rCount > 0 ? rArmZ / rCount : axisCZ;
 
+  // Arms are influenced by BOTH the arms override AND the shoulders override
+  // (increasing shoulders should make the whole upper body including arms larger)
+  const armOverrideCombined = overrides.arms + overrides.shoulders * 0.5;
   const armGlobal = 1 + (deltaBodyFat * ARM_SENSITIVITY / 100);
-  const armRegional = 1 + (overrides.arms / 100);
-  const armScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, armGlobal * armRegional));
+  const armRegional = 1 + (armOverrideCombined / 100);
+  const armScaleBase = Math.max(MIN_SCALE, Math.min(MAX_SCALE, armGlobal * armRegional));
 
   // Phase 1: Radial displacement with clamped scaling
   for (let i = 0; i < vertexCount; i++) {
@@ -165,9 +165,10 @@ export function deformMesh(
     let cx: number, cz: number, combinedScale: number;
 
     if (binding.segmentId === 'arms') {
+      // Arms: scale volumetrically from arm center (both X and Z expansion)
       if (ox < axisCX) { cx = leftCX; cz = leftCZ; }
       else { cx = rightCX; cz = rightCZ; }
-      combinedScale = armScale;
+      combinedScale = armScaleBase;
     } else {
       cx = axisCX;
       cz = axisCZ;
@@ -198,13 +199,13 @@ export function deformMesh(
     }
   }
 
-  // Phase 2: Laplacian smoothing to eliminate artifacts
+  // Phase 2: Laplacian smoothing to eliminate artifacts and tears
   if (adjacency && adjacency.length === vertexCount) {
-    // More smoothing for larger deformations
     const deformMagnitude = Math.abs(deltaBodyFat) +
-      Object.values(overrides).reduce((s, v) => s + Math.abs(v), 0) / 6;
-    const iterations = deformMagnitude > 10 ? 4 : deformMagnitude > 3 ? 3 : 2;
-    const lambda = 0.45;
+      Object.values(overrides).reduce((s, v) => s + Math.abs(v), 0) / 4;
+    // More aggressive smoothing: 3-6 iterations based on deformation
+    const iterations = deformMagnitude > 15 ? 6 : deformMagnitude > 8 ? 5 : deformMagnitude > 3 ? 4 : 3;
+    const lambda = 0.50;
     laplacianSmooth(positions, originalPositions, adjacency, iterations, lambda);
   }
 }

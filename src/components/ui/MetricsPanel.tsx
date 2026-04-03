@@ -76,7 +76,7 @@ export default function MetricsPanel() {
         Metrics
       </div>
       <div className="flex flex-col divide-y" style={{ borderColor: 'var(--rc-border-subtle)' }}>
-        <MetricRow label="Weight" value={metrics.weight} originalValue={originalMetrics.weight} unit="kg" />
+        <MetricRow label="Weight" value={metrics.weight} originalValue={originalMetrics.weight} unit="lbs" />
         <MetricRow label="BMI" value={metrics.bmi} originalValue={originalMetrics.bmi} unit="" />
         <MetricRow label="Waist" value={metrics.waistCirc} originalValue={originalMetrics.waistCirc} unit="cm" />
         <MetricRow label="Hip" value={metrics.hipCirc} originalValue={originalMetrics.hipCirc} unit="cm" />

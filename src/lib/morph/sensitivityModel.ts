@@ -50,4 +50,4 @@ export const RING_SENSITIVITY: Record<string, number> = {
 };
 
 /** Arm vertices use a flat sensitivity since they aren't ring-based */
-export const ARM_SENSITIVITY = 0.35;
+export const ARM_SENSITIVITY = 0.55;
