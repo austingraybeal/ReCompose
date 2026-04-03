@@ -32,6 +32,7 @@ export function projectMetrics(
     (overrides.waist * 0.003 +
      overrides.hips * 0.002 +
      overrides.torso * 0.002 +
+     overrides.thighs * 0.0015 +
      overrides.legs * 0.001 +
      overrides.shoulders * 0.001 +
      overrides.arms * 0.0005) * bodyComp.weight / 100;

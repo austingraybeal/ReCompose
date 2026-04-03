@@ -53,13 +53,22 @@ export const SEGMENTS: SegmentDef[] = [
     yRange: [700, 860],
   },
   {
-    id: 'legs',
-    label: 'Legs',
+    id: 'thighs',
+    label: 'Thighs',
     icon: '\u{1F9B5}',
     rings: [
       'UpperLeftThigh', 'UpperRightThigh',
       'MidLeftThigh', 'MidRightThigh',
       'ActualMidLeftThigh', 'ActualMidRightThigh',
+    ],
+    color: 'var(--rc-seg-thighs)',
+    yRange: [480, 700],
+  },
+  {
+    id: 'legs',
+    label: 'Lower Legs',
+    icon: '\u{1F9E6}',
+    rings: [
       'KneeLeftLeg', 'KneeRightLeg',
       'ActualKneeLeftLeg', 'ActualKneeRightLeg',
       'UnderKneeLeftLeg', 'UnderKneeRightLeg',
@@ -68,7 +77,7 @@ export const SEGMENTS: SegmentDef[] = [
       'ActualAnkleLeftLeg', 'ActualAnkleRightLeg',
     ],
     color: 'var(--rc-seg-legs)',
-    yRange: [0, 700],
+    yRange: [0, 480],
   },
 ];
 

@@ -19,6 +19,7 @@ export const SEGMENT_COLORS: Record<string, string> = {
   torso: '#4acfa0',
   waist: '#f0c84a',
   hips: '#f0764a',
+  thighs: '#e879a8',
   legs: '#a78bfa',
 } as const;
 

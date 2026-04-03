@@ -13,19 +13,19 @@ const SceneCanvas = dynamic(
 
 export default function ViewerLayout() {
   return (
-    <div className="flex flex-col h-[calc(100vh-52px)]">
-      {/* Main content */}
+    <div className="flex flex-col h-[calc(100vh-45px)]">
       <div className="flex flex-1 min-h-0">
-        {/* Left panel — Camera + Segments */}
+        {/* Left panel */}
         <aside
-          className="hidden md:flex flex-col gap-4 w-56 p-3 overflow-y-auto border-r shrink-0"
+          className="hidden md:flex flex-col gap-4 w-56 p-3 overflow-y-auto shrink-0"
           style={{
-            background: 'var(--rc-bg-surface)',
-            borderColor: 'var(--rc-border-subtle)',
+            background: 'rgba(12, 13, 19, 0.9)',
+            backdropFilter: 'blur(20px)',
+            borderRight: '1px solid var(--rc-border-subtle)',
           }}
         >
           <ViewControls />
-          <div className="border-t" style={{ borderColor: 'var(--rc-border-subtle)' }} />
+          <div style={{ borderTop: '1px solid var(--rc-border-subtle)' }} />
           <RegionalPanel />
         </aside>
 
@@ -33,30 +33,34 @@ export default function ViewerLayout() {
         <main className="flex-1 relative min-w-0">
           <SceneCanvas />
 
-          {/* Mobile controls overlay */}
-          <div className="md:hidden absolute bottom-0 left-0 right-0 p-3" style={{ background: 'linear-gradient(transparent, var(--rc-bg-primary))' }}>
+          {/* Mobile controls */}
+          <div className="md:hidden absolute bottom-0 left-0 right-0 p-3"
+            style={{ background: 'linear-gradient(transparent, rgba(10, 11, 15, 0.95))' }}
+          >
             <RegionalPanel />
           </div>
         </main>
 
-        {/* Right panel — Metrics */}
+        {/* Right panel */}
         <aside
-          className="hidden lg:flex flex-col w-56 border-l overflow-y-auto shrink-0"
+          className="hidden lg:flex flex-col w-52 overflow-y-auto shrink-0"
           style={{
-            background: 'var(--rc-bg-surface)',
-            borderColor: 'var(--rc-border-subtle)',
+            background: 'rgba(12, 13, 19, 0.9)',
+            backdropFilter: 'blur(20px)',
+            borderLeft: '1px solid var(--rc-border-subtle)',
           }}
         >
           <MetricsPanel />
         </aside>
       </div>
 
-      {/* Bottom bar — Global slider */}
+      {/* Bottom bar */}
       <div
-        className="border-t shrink-0"
+        className="shrink-0"
         style={{
-          background: 'var(--rc-bg-surface)',
-          borderColor: 'var(--rc-border-subtle)',
+          background: 'rgba(12, 13, 19, 0.95)',
+          backdropFilter: 'blur(20px)',
+          borderTop: '1px solid var(--rc-border-subtle)',
         }}
       >
         <GlobalSlider />

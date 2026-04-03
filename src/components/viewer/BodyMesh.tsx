@@ -17,6 +17,7 @@ const SEGMENT_COLORS: Record<string, Color> = {
   torso: new Color('#4acfa0'),
   waist: new Color('#f0c84a'),
   hips: new Color('#f0764a'),
+  thighs: new Color('#e879a8'),
   legs: new Color('#a78bfa'),
 };
 
