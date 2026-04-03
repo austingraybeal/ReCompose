@@ -2,9 +2,13 @@
 
 import ToggleBar from '@/components/ui/ToggleBar';
 import { useScanStore } from '@/lib/stores/scanStore';
+import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 
 export default function Header() {
   const hasScan = useScanStore((s) => !!s.scanData);
+  const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
+  const startAssessment = useAssessmentStore((s) => s.startAssessment);
+  const resetAssessment = useAssessmentStore((s) => s.resetAssessment);
 
   return (
     <header
@@ -32,7 +36,38 @@ export default function Header() {
         </h1>
       </div>
 
-      {hasScan && <ToggleBar />}
+      <div className="flex items-center gap-3">
+        {hasScan && !isAssessmentMode && <ToggleBar />}
+
+        {hasScan && (
+          isAssessmentMode ? (
+            <button
+              onClick={resetAssessment}
+              className="px-3.5 py-1.5 rounded-full text-rc-xs font-mono tracking-wide transition-all duration-200"
+              style={{
+                background: 'rgba(224, 68, 90, 0.1)',
+                color: '#e0445a',
+                border: '1px solid rgba(224, 68, 90, 0.3)',
+              }}
+            >
+              Exit Assessment
+            </button>
+          ) : (
+            <button
+              onClick={startAssessment}
+              className="px-3.5 py-1.5 rounded-full text-rc-xs font-mono tracking-wide transition-all duration-200"
+              style={{
+                background: 'linear-gradient(135deg, rgba(62, 207, 180, 0.2), rgba(62, 207, 180, 0.08))',
+                color: 'var(--rc-accent)',
+                border: '1px solid rgba(62, 207, 180, 0.3)',
+                boxShadow: '0 0 12px rgba(62, 207, 180, 0.1)',
+              }}
+            >
+              Assess Body Image
+            </button>
+          )
+        )}
+      </div>
     </header>
   );
 }

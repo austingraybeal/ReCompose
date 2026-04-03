@@ -1,5 +1,6 @@
 'use client';
 
+import { forwardRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import Lighting from './Lighting';
 import Ground from './Ground';
@@ -8,14 +9,15 @@ import BodyMesh from './BodyMesh';
 import GhostOverlay from './GhostOverlay';
 import SegmentHighlight from './SegmentHighlight';
 
-export default function SceneCanvas() {
+const SceneCanvas = forwardRef<HTMLCanvasElement>(function SceneCanvas(_props, ref) {
   return (
     <div className="w-full h-full">
       <Canvas
         camera={{ fov: 40, near: 0.1, far: 100 }}
-        gl={{ antialias: true, alpha: false }}
+        gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
         style={{ background: '#0a0b0f' }}
         dpr={[1, 2]}
+        ref={ref}
       >
         <Lighting />
         <Ground />
@@ -26,4 +28,6 @@ export default function SceneCanvas() {
       </Canvas>
     </div>
   );
-}
+});
+
+export default SceneCanvas;
