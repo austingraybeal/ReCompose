@@ -56,6 +56,8 @@ export interface ScanData {
   bodyComp: BodyComposition;
   vertexBindings: VertexBinding[];
   armThreshold: number;
+  /** Per-vertex adjacency list (indices of connected neighbors) */
+  adjacency: Uint32Array[];
 }
 
 /** The six body segment IDs */
