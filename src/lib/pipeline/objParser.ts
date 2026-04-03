@@ -58,11 +58,19 @@ export function parseOBJ(objText: string): BufferGeometry {
   return merged;
 }
 
+/** Transform parameters from normalization */
+export interface NormalizeTransform {
+  centerX: number;
+  centerZ: number;
+  minY: number;
+  scale: number;
+}
+
 /**
  * Auto-center and normalize geometry to unit height at origin.
- * Returns the scale factor used for coordinate conversion.
+ * Returns the transform parameters so other data can be transformed to match.
  */
-export function normalizeGeometry(geometry: BufferGeometry): number {
+export function normalizeGeometry(geometry: BufferGeometry): NormalizeTransform {
   geometry.computeBoundingBox();
   const box = geometry.boundingBox!;
 
@@ -87,5 +95,5 @@ export function normalizeGeometry(geometry: BufferGeometry): number {
   geometry.computeBoundingBox();
   geometry.computeVertexNormals();
 
-  return scale;
+  return { centerX, centerZ, minY, scale };
 }

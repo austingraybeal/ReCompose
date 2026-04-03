@@ -31,11 +31,11 @@ function ringOwnerSegment(ring: LandmarkRing): SegmentId {
   for (const seg of SEGMENTS) {
     if (seg.rings.includes(ring.name)) return seg.id;
   }
-  // Fallback by height
-  if (ring.height >= 1180) return 'shoulders';
-  if (ring.height >= 1070) return 'torso';
-  if (ring.height >= 860) return 'waist';
-  if (ring.height >= 700) return 'hips';
+  // Fallback by normalized height (0-1 range, assuming ~1800mm body)
+  if (ring.height >= 0.66) return 'shoulders';
+  if (ring.height >= 0.59) return 'torso';
+  if (ring.height >= 0.48) return 'waist';
+  if (ring.height >= 0.39) return 'hips';
   return 'legs';
 }
 
