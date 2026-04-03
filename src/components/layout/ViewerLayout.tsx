@@ -6,6 +6,7 @@ import ViewControls from '@/components/ui/ViewControls';
 import RegionalPanel from '@/components/ui/RegionalPanel';
 import MetricsPanel from '@/components/ui/MetricsPanel';
 import GlobalSlider from '@/components/ui/GlobalSlider';
+import SMPLModelLoader from '@/components/ui/SMPLModelLoader';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 
 const SceneCanvas = dynamic(
@@ -43,6 +44,8 @@ export default function ViewerLayout() {
             }}
           >
             <ViewControls />
+            <div style={{ borderTop: '1px solid var(--rc-border-subtle)' }} />
+            <SMPLModelLoader />
             <div style={{ borderTop: '1px solid var(--rc-border-subtle)' }} />
             <RegionalPanel />
           </aside>

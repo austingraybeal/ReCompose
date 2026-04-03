@@ -6,6 +6,7 @@ import Lighting from './Lighting';
 import Ground from './Ground';
 import CameraRig from './CameraRig';
 import BodyMesh from './BodyMesh';
+import SMPLMesh from './SMPLMesh';
 import GhostOverlay from './GhostOverlay';
 import SegmentHighlight from './SegmentHighlight';
 
@@ -23,6 +24,7 @@ const SceneCanvas = forwardRef<HTMLCanvasElement>(function SceneCanvas(_props, r
         <Ground />
         <CameraRig />
         <BodyMesh />
+        <SMPLMesh />
         <GhostOverlay />
         <SegmentHighlight />
       </Canvas>
