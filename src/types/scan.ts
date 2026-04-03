@@ -58,8 +58,8 @@ export interface ScanData {
   armThreshold: number;
 }
 
-/** The seven body segment IDs */
-export type SegmentId = 'shoulders' | 'arms' | 'torso' | 'waist' | 'hips' | 'thighs' | 'legs';
+/** The six body segment IDs */
+export type SegmentId = 'shoulders' | 'arms' | 'torso' | 'waist' | 'hips' | 'legs';
 
 /** Segment override values */
 export type SegmentOverrides = Record<SegmentId, number>;

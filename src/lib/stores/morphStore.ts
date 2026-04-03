@@ -7,7 +7,6 @@ const DEFAULT_OVERRIDES: SegmentOverrides = {
   torso: 0,
   waist: 0,
   hips: 0,
-  thighs: 0,
   legs: 0,
 };
 

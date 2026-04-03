@@ -28,15 +28,13 @@ export const RING_SENSITIVITY: Record<string, number> = {
   Hip: 1.05,
   HipWidest: 1.00,
 
-  // Thighs segment
+  // Legs segment (gradient: high proximal → low distal)
   UpperLeftThigh: 0.80,
   UpperRightThigh: 0.80,
   MidLeftThigh: 0.50,
   ActualMidLeftThigh: 0.50,
   MidRightThigh: 0.50,
   ActualMidRightThigh: 0.50,
-
-  // Lower Legs segment
   KneeLeftLeg: 0.15,
   KneeRightLeg: 0.15,
   ActualKneeLeftLeg: 0.15,
