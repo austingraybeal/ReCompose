@@ -33,6 +33,7 @@ export function useSegmentClassifier() {
       torso: [0.29, 0.81, 0.63],     // #4acfa0
       waist: [0.94, 0.78, 0.29],     // #f0c84a
       hips: [0.94, 0.46, 0.29],      // #f0764a
+      thighs: [0.91, 0.47, 0.66],    // #e879a8
       legs: [0.65, 0.55, 0.98],      // #a78bfa
     };
 

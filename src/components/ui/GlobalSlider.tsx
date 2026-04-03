@@ -1,7 +1,7 @@
 'use client';
 
 import { useMorphStore } from '@/lib/stores/morphStore';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 /**
  * Master body fat percentage slider with gradient track and hero display.
@@ -15,52 +15,46 @@ export default function GlobalSlider() {
     setGlobalBodyFat(parseFloat(e.target.value));
   };
 
-  // Position of the "ACTUAL" marker as percentage of track
   const actualPosition = ((originalBodyFat - 5) / (55 - 5)) * 100;
-  const currentPosition = ((globalBodyFat - 5) / (55 - 5)) * 100;
+
+  const bfColor = globalBodyFat < 20 ? 'var(--rc-bf-lean)'
+    : globalBodyFat < 30 ? 'var(--rc-bf-mid)'
+    : globalBodyFat < 40 ? 'var(--rc-bf-high)'
+    : 'var(--rc-bf-very-high)';
 
   return (
-    <div className="w-full max-w-xl mx-auto px-4 py-3">
-      {/* Hero BF% display */}
-      <div className="text-center mb-3">
+    <div className="w-full max-w-2xl mx-auto px-6 py-4">
+      <div className="flex items-end justify-center gap-3 mb-4">
         <motion.div
-          className="font-mono font-bold text-rc-hero leading-none"
-          style={{
-            color: globalBodyFat < 20 ? 'var(--rc-bf-lean)'
-              : globalBodyFat < 30 ? 'var(--rc-bf-mid)'
-              : globalBodyFat < 40 ? 'var(--rc-bf-high)'
-              : 'var(--rc-bf-very-high)',
-          }}
-          key={globalBodyFat.toFixed(1)}
-          initial={{ opacity: 0.7, scale: 0.98 }}
+          className="font-mono font-bold leading-none"
+          style={{ fontSize: '52px', color: bfColor }}
+          key={Math.round(globalBodyFat)}
+          initial={{ opacity: 0.7, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'spring', damping: 20, stiffness: 200 }}
         >
-          {globalBodyFat.toFixed(1)}%
+          {Math.round(globalBodyFat)}%
         </motion.div>
-        <div className="text-rc-xs uppercase tracking-[2px] mt-1" style={{ color: 'var(--rc-text-dim)' }}>
-          Body Fat
+        <div className="pb-2">
+          <div className="text-rc-xs uppercase tracking-[3px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+            Body Fat
+          </div>
         </div>
       </div>
 
-      {/* Slider track */}
       <div className="relative">
         {/* ACTUAL marker */}
         {originalBodyFat > 0 && (
           <div
-            className="absolute top-0 -translate-x-1/2 flex flex-col items-center pointer-events-none"
-            style={{ left: `${actualPosition}%`, zIndex: 10 }}
+            className="absolute -top-1 -translate-x-1/2 flex flex-col items-center pointer-events-none z-10"
+            style={{ left: `${actualPosition}%` }}
           >
-            <div
-              className="text-rc-xs uppercase tracking-[1px] font-mono mb-1"
+            <div className="text-[9px] uppercase tracking-[1px] font-mono mb-0.5"
               style={{ color: 'var(--rc-text-dim)' }}
             >
               ACTUAL
             </div>
-            <div
-              className="w-0.5 h-4"
-              style={{ background: 'var(--rc-text-dim)' }}
-            />
+            <div className="w-px h-5" style={{ background: 'var(--rc-text-dim)' }} />
           </div>
         )}
 
@@ -68,20 +62,19 @@ export default function GlobalSlider() {
           type="range"
           min="5"
           max="55"
-          step="0.1"
+          step="1"
           value={globalBodyFat}
           onChange={handleChange}
-          className="w-full h-2 mt-8 relative z-20"
+          className="w-full h-2 mt-7 relative z-20 rounded-full"
           style={{
-            background: `linear-gradient(to right, var(--rc-bf-lean), var(--rc-bf-mid), var(--rc-bf-high), var(--rc-bf-very-high))`,
-            borderRadius: '3px',
+            background: `linear-gradient(to right, var(--rc-bf-lean), var(--rc-bf-mid) 50%, var(--rc-bf-high) 75%, var(--rc-bf-very-high))`,
+            borderRadius: '99px',
           }}
         />
 
-        {/* Min/Max labels */}
-        <div className="flex justify-between mt-1">
-          <span className="text-rc-xs font-mono" style={{ color: 'var(--rc-text-dim)' }}>5%</span>
-          <span className="text-rc-xs font-mono" style={{ color: 'var(--rc-text-dim)' }}>55%</span>
+        <div className="flex justify-between mt-2">
+          <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>5%</span>
+          <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>55%</span>
         </div>
       </div>
     </div>

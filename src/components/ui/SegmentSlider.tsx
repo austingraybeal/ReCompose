@@ -18,28 +18,30 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
 
   return (
     <div
-      className={`px-3 py-2 rounded-lg transition-all duration-150 ${
-        focused ? 'ring-1' : ''
-      }`}
+      className="px-3 py-2 rounded-xl transition-all duration-200"
       style={{
-        background: isActive ? 'var(--rc-accent-dim)' : 'transparent',
-        borderColor: isActive ? 'var(--rc-border-active)' : 'transparent',
-        border: isActive ? '1px solid var(--rc-border-active)' : '1px solid transparent',
-        boxShadow: isActive ? 'var(--rc-shadow-glow)' : 'none',
+        background: isActive
+          ? 'linear-gradient(135deg, rgba(62, 207, 180, 0.08), rgba(62, 207, 180, 0.02))'
+          : 'var(--rc-bg-elevated)',
+        border: isActive
+          ? '1px solid rgba(62, 207, 180, 0.3)'
+          : focused
+            ? '1px solid rgba(62, 207, 180, 0.2)'
+            : '1px solid var(--rc-border-subtle)',
+        boxShadow: isActive ? '0 0 12px rgba(62, 207, 180, 0.08)' : 'none',
       }}
     >
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
-          <span className="text-rc-base">{icon}</span>
-          <span
-            className="text-rc-xs uppercase tracking-[2px] font-body"
+          <span className="text-rc-sm">{icon}</span>
+          <span className="text-[10px] uppercase tracking-[2px] font-mono"
             style={{ color: 'var(--rc-text-secondary)' }}
           >
             {label}
           </span>
         </div>
         <span
-          className="font-mono font-bold text-rc-sm"
+          className="font-mono font-bold text-rc-xs tabular-nums"
           style={{
             color: value > 0 ? 'var(--rc-delta-positive)'
               : value < 0 ? 'var(--rc-delta-negative)'
@@ -60,7 +62,7 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
         className="w-full h-1"
         style={{
           background: `linear-gradient(to right, var(--rc-delta-negative), var(--rc-bg-hover) 50%, var(--rc-delta-positive))`,
-          borderRadius: '2px',
+          borderRadius: '99px',
         }}
       />
     </div>
