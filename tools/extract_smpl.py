@@ -23,9 +23,11 @@ The .pkl files are NOT included in this repo — obtain them from:
 
 import argparse
 import base64
+import io
 import json
 import pickle
 import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -34,10 +36,79 @@ import numpy as np
 MODELS_DIR = Path(__file__).parent.parent / "public" / "models"
 
 
+class _StubModule(types.ModuleType):
+    """Fake module that returns numpy arrays for any attribute access."""
+    def __getattr__(self, name):
+        # Return a class that converts to numpy array when unpickled
+        return _make_stub_class(name)
+
+
+def _make_stub_class(name):
+    """Create a stub class that pickle can reconstruct as a numpy array."""
+    class Stub:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __reduce__(self):
+            return (np.array, (self,))
+        def __array__(self):
+            return np.array([])
+    Stub.__name__ = name
+    Stub.__qualname__ = name
+    return Stub
+
+
+class SMPLUnpickler(pickle.Unpickler):
+    """Custom unpickler that replaces chumpy references with numpy stubs.
+
+    The SMPL .pkl files depend on 'chumpy' (an old autodiff library).
+    This unpickler intercepts chumpy imports and returns plain numpy arrays,
+    which is all we need for extracting the shape data.
+    """
+    def find_class(self, module, name):
+        if module.startswith("chumpy"):
+            # For chumpy.ch.Ch (the main array type), return numpy array
+            if name == "Ch":
+                return self._make_ch_stub()
+            return _make_stub_class(name)
+        try:
+            return super().find_class(module, name)
+        except (ImportError, AttributeError):
+            return _make_stub_class(name)
+
+    @staticmethod
+    def _make_ch_stub():
+        """Stub for chumpy.ch.Ch that stores data as numpy array."""
+        class ChStub:
+            def __init__(self, *args, **kwargs):
+                self._data = None
+            def __setstate__(self, state):
+                if isinstance(state, dict):
+                    self._data = state.get("x", state.get("a", None))
+                elif isinstance(state, np.ndarray):
+                    self._data = state
+            def __array__(self, dtype=None):
+                if self._data is not None:
+                    return np.asarray(self._data, dtype=dtype)
+                return np.array([], dtype=dtype)
+            def __reduce__(self):
+                return (np.array, (self,))
+        return ChStub
+
+
 def load_smpl_model(pkl_path: str) -> dict:
-    """Load a SMPL/SMPL-X .pkl file."""
+    """Load a SMPL/SMPL-X .pkl file, bypassing chumpy dependency."""
     with open(pkl_path, "rb") as f:
-        model = pickle.load(f, encoding="latin1")
+        model = SMPLUnpickler(f, encoding="latin1").load()
+
+    # Convert any remaining chumpy objects to numpy arrays
+    for key in list(model.keys()):
+        val = model[key]
+        if hasattr(val, "__array__") and not isinstance(val, np.ndarray):
+            try:
+                model[key] = np.array(val)
+            except Exception:
+                pass
+
     return model
 
 
