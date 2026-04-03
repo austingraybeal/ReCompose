@@ -2,21 +2,21 @@
 """
 Extract SMPL / SMPL-X model data from .pkl to browser-friendly JSON.
 
-Usage:
-    python tools/extract_smpl.py <model.pkl> [--output path.json] [--components 10]
+Usage (single model):
+    python tools/extract_smpl.py model_neutral.pkl --gender neutral
 
-By default, outputs to public/models/smpl_neutral.json so the app auto-loads it.
+Usage (all three at once — recommended):
+    python tools/extract_smpl.py --all \\
+        --male path/to/basicmodel_m_*.pkl \\
+        --female path/to/basicmodel_f_*.pkl \\
+        --neutral path/to/basicModel_neutral_*.pkl
 
-Example:
-    python tools/extract_smpl.py ~/Downloads/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl
-
-This reads the standard SMPL .pkl format (as distributed by MPI) and outputs
-a JSON file with base64-encoded typed arrays that the app fetches on boot.
+Outputs go to public/models/smpl_{gender}.json so the app auto-loads them.
 
 Requirements:
     pip install numpy
 
-The .pkl files are NOT included in this repo — you must obtain them from:
+The .pkl files are NOT included in this repo — obtain them from:
     https://smpl.is.tue.mpg.de/ (SMPL)
     https://smpl-x.is.tue.mpg.de/ (SMPL-X)
 """
@@ -29,6 +29,9 @@ import sys
 from pathlib import Path
 
 import numpy as np
+
+
+MODELS_DIR = Path(__file__).parent.parent / "public" / "models"
 
 
 def load_smpl_model(pkl_path: str) -> dict:
@@ -56,23 +59,20 @@ def extract(pkl_path: str, num_components: int = 10, gender: str = "neutral") ->
       - 'v_template': (V, 3) mean template vertices
       - 'shapedirs': (V, 3, K) shape blend shapes
       - 'f': (F, 3) face indices
-      - 'J_regressor': joint regressor (not needed for shape-only)
-      - 'weights': skinning weights (not needed for shape-only)
-      - 'posedirs': pose blend shapes (not needed for shape-only)
-      - 'kintree_table': kinematic tree (not needed for shape-only)
+      - 'weights': skinning weights (used to derive segment labels)
     """
     model = load_smpl_model(pkl_path)
 
     # Extract template vertices
     v_template = np.array(model["v_template"], dtype=np.float32)  # (V, 3)
     vertex_count = v_template.shape[0]
-    print(f"Vertices: {vertex_count}")
+    print(f"  Vertices: {vertex_count}")
 
     # Extract shape blend shapes, truncate to requested components
     shapedirs = np.array(model["shapedirs"], dtype=np.float32)  # (V, 3, K_full)
     K_full = shapedirs.shape[2]
     K = min(num_components, K_full)
-    print(f"Shape components: {K} (of {K_full} available)")
+    print(f"  Shape components: {K} (of {K_full} available)")
 
     shapedirs = shapedirs[:, :, :K]  # (V, 3, K)
 
@@ -82,20 +82,17 @@ def extract(pkl_path: str, num_components: int = 10, gender: str = "neutral") ->
     # Extract faces
     faces = np.array(model["f"], dtype=np.uint32)  # (F, 3)
     face_count = faces.shape[0]
-    print(f"Faces: {face_count}")
+    print(f"  Faces: {face_count}")
 
-    # Flatten template vertices to [x0,y0,z0, x1,y1,z1, ...]
+    # Flatten
     v_template_flat = v_template.flatten()
-
-    # Flatten faces to [i0,i1,i2, ...]
     faces_flat = faces.flatten()
 
-    # Build segment labels from SMPL vertex segmentation if available
+    # Build segment labels from skinning weights
     segment_labels = None
     if "segment_labels" in model:
         segment_labels = model["segment_labels"]
     elif "weights" in model:
-        # Derive approximate segments from skinning weights
         # SMPL joints: 0=pelvis, 1=l_hip, 2=r_hip, 3=spine1, 4=l_knee, 5=r_knee,
         # 6=spine2, 7=l_ankle, 8=r_ankle, 9=spine3, 10=l_foot, 11=r_foot,
         # 12=neck, 13=l_collar, 14=r_collar, 15=head, 16=l_shoulder, 17=r_shoulder,
@@ -124,53 +121,82 @@ def extract(pkl_path: str, num_components: int = 10, gender: str = "neutral") ->
 
     if segment_labels is not None:
         result["segmentLabels"] = segment_labels
-        # Print segment distribution
         from collections import Counter
         dist = Counter(segment_labels)
-        print(f"Segment distribution: {dict(dist)}")
+        print(f"  Segments: {dict(dist)}")
 
     return result
+
+
+def extract_and_save(pkl_path: str, gender: str, components: int, output: str = None):
+    """Extract a single model and write to JSON."""
+    out_path = output or str(MODELS_DIR / f"smpl_{gender}.json")
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n[{gender}] Extracting {pkl_path} ...")
+    data = extract(pkl_path, components, gender)
+
+    with open(out_path, "w") as f:
+        json.dump(data, f)
+
+    size_mb = Path(out_path).stat().st_size / (1024 * 1024)
+    print(f"  Written to {out_path} ({size_mb:.1f} MB)")
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Extract SMPL model data to browser-friendly JSON"
     )
-    parser.add_argument("pkl_path", help="Path to SMPL .pkl file")
+
+    # Single-model mode
+    parser.add_argument("pkl_path", nargs="?", help="Path to SMPL .pkl file (single-model mode)")
+    parser.add_argument("--output", "-o", default=None, help="Output JSON path")
     parser.add_argument(
-        "--output", "-o", default=None,
-        help="Output JSON path (default: same name with .json extension)"
+        "--gender", "-g", default="neutral",
+        choices=["neutral", "male", "female"],
+        help="Model gender (single-model mode, default: neutral)"
     )
     parser.add_argument(
         "--components", "-k", type=int, default=10,
         help="Number of shape components to extract (default: 10)"
     )
-    parser.add_argument(
-        "--gender", "-g", default="neutral",
-        choices=["neutral", "male", "female"],
-        help="Model gender (default: neutral)"
-    )
+
+    # Batch mode: extract all three at once
+    parser.add_argument("--all", action="store_true", help="Extract all three gender models")
+    parser.add_argument("--male", default=None, help="Path to male .pkl")
+    parser.add_argument("--female", default=None, help="Path to female .pkl")
+    parser.add_argument("--neutral", default=None, help="Path to neutral .pkl")
 
     args = parser.parse_args()
 
-    pkl_path = Path(args.pkl_path)
-    if not pkl_path.exists():
-        print(f"Error: {pkl_path} not found", file=sys.stderr)
-        sys.exit(1)
+    if args.all:
+        # Batch mode
+        count = 0
+        for gender, path in [("male", args.male), ("female", args.female), ("neutral", args.neutral)]:
+            if path:
+                if not Path(path).exists():
+                    print(f"Warning: {path} not found, skipping {gender}", file=sys.stderr)
+                    continue
+                extract_and_save(path, gender, args.components)
+                count += 1
+        if count == 0:
+            print("Error: provide at least one of --male, --female, --neutral with --all", file=sys.stderr)
+            sys.exit(1)
+        print(f"\nDone! Extracted {count} model(s) to {MODELS_DIR}/")
+    else:
+        # Single-model mode
+        if not args.pkl_path:
+            parser.print_help()
+            sys.exit(1)
 
-    # Default: output to public/models/ for auto-loading by the app
-    default_output = Path(__file__).parent.parent / "public" / "models" / "smpl_neutral.json"
-    output_path = args.output or str(default_output)
+        pkl_path = Path(args.pkl_path)
+        if not pkl_path.exists():
+            print(f"Error: {pkl_path} not found", file=sys.stderr)
+            sys.exit(1)
 
-    print(f"Extracting {pkl_path} ...")
-    data = extract(str(pkl_path), args.components, args.gender)
+        extract_and_save(str(pkl_path), args.gender, args.components, args.output)
 
-    with open(output_path, "w") as f:
-        json.dump(data, f)
-
-    size_mb = Path(output_path).stat().st_size / (1024 * 1024)
-    print(f"Written to {output_path} ({size_mb:.1f} MB)")
-    print("Load this file in the ReCompose UI under Settings > Load SMPL Model")
+    print("\nThe app will auto-load these models on startup.")
 
 
 if __name__ == "__main__":

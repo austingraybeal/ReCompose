@@ -1,20 +1,28 @@
 'use client';
 
 import { useSmplStore } from '@/lib/stores/smplStore';
+import type { SMPLGender } from '@/lib/stores/smplStore';
+
+const GENDER_OPTIONS: { id: SMPLGender; label: string }[] = [
+  { id: 'male', label: 'Male' },
+  { id: 'female', label: 'Female' },
+];
 
 /**
- * Status panel showing SMPL model state with toggle to switch
- * between SMPL (Phase 2) and radial (Phase 1) deformation engines.
- * The model auto-loads from public/models/ on app boot.
+ * Body model panel: gender selector + SMPL/Scan engine toggle.
+ * Models auto-load from public/models/ on app boot.
  */
 export default function SMPLModelLoader() {
   const modelData = useSmplStore((s) => s.modelData);
   const isLoading = useSmplStore((s) => s.isLoading);
   const useSmpl = useSmplStore((s) => s.useSmpl);
+  const gender = useSmplStore((s) => s.gender);
+  const availableGenders = useSmplStore((s) => s.availableGenders);
+  const setGender = useSmplStore((s) => s.setGender);
   const setUseSmpl = useSmplStore((s) => s.setUseSmpl);
 
-  // Don't show panel if no model loaded and not loading
-  if (!modelData && !isLoading) return null;
+  // Don't show if no models available and not loading
+  if (availableGenders.size === 0 && !isLoading) return null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -25,31 +33,66 @@ export default function SMPLModelLoader() {
         Body Model
       </div>
 
-      {/* Status indicator */}
+      {/* Gender selector */}
+      <div className="flex gap-1.5">
+        {GENDER_OPTIONS.map((opt) => {
+          const available = availableGenders.has(opt.id);
+          const active = gender === opt.id && modelData?.gender === opt.id;
+          return (
+            <button
+              key={opt.id}
+              onClick={() => available && setGender(opt.id)}
+              disabled={!available || isLoading}
+              className="flex-1 px-2 py-1.5 rounded-lg text-rc-xs font-mono transition-all duration-200 text-center"
+              style={{
+                background: active
+                  ? 'linear-gradient(135deg, rgba(62, 207, 180, 0.15), rgba(62, 207, 180, 0.05))'
+                  : 'var(--rc-bg-elevated)',
+                color: !available
+                  ? 'rgba(255,255,255,0.2)'
+                  : active
+                    ? 'var(--rc-accent)'
+                    : 'var(--rc-text-dim)',
+                border: active
+                  ? '1px solid rgba(62, 207, 180, 0.25)'
+                  : '1px solid var(--rc-border-default)',
+                opacity: isLoading ? 0.5 : 1,
+                cursor: available ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Status line */}
       <div
-        className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-rc-xs font-mono"
+        className="flex items-center gap-2 px-2 py-1 rounded-lg text-[10px] font-mono"
         style={{
           background: 'var(--rc-bg-elevated)',
           border: '1px solid var(--rc-border-default)',
-          color: modelData ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+          color: modelData ? 'var(--rc-text-dim)' : 'var(--rc-text-dim)',
         }}
       >
         <div
-          className="w-1.5 h-1.5 rounded-full"
+          className="w-1.5 h-1.5 rounded-full shrink-0"
           style={{
             background: isLoading
               ? 'var(--rc-text-dim)'
-              : useSmpl
+              : useSmpl && modelData
                 ? 'var(--rc-accent)'
                 : 'rgba(255,255,255,0.15)',
           }}
         />
         {isLoading
-          ? 'Loading SMPL...'
-          : `SMPL ${modelData!.gender} · ${modelData!.vertexCount.toLocaleString()}v`}
+          ? 'Loading...'
+          : modelData
+            ? `SMPL · ${modelData.vertexCount.toLocaleString()} vertices`
+            : 'No model available'}
       </div>
 
-      {/* Engine toggle */}
+      {/* Engine toggle: SMPL vs Scan */}
       {modelData && (
         <div className="flex gap-1.5">
           <button
