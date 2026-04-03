@@ -1,0 +1,38 @@
+/** Ring names that can appear in the Core Measures CSV landmark data */
+export const RING_NAMES = [
+  'HeadCircum',
+  'Collar',
+  'OverArm',
+  'Bust',
+  'BustWithDrop',
+  'UnderBust',
+  'Waist',
+  'WaistAt50',
+  'StomachFP',
+  'StomachMax',
+  'Abdomen',
+  'Seat',
+  'Hip',
+  'HipWidest',
+  'UpperLeftThigh',
+  'UpperRightThigh',
+  'MidLeftThigh',
+  'MidRightThigh',
+  'ActualMidLeftThigh',
+  'ActualMidRightThigh',
+  'KneeLeftLeg',
+  'KneeRightLeg',
+  'ActualKneeLeftLeg',
+  'ActualKneeRightLeg',
+  'UnderKneeLeftLeg',
+  'UnderKneeRightLeg',
+  'CalfLeftLeg',
+  'CalfRightLeg',
+  'AnkleLeftLeg',
+  'AnkleRightLeg',
+  'ActualAnkleLeftLeg',
+  'ActualAnkleRightLeg',
+] as const;
+
+/** Cardinal directions for landmark points within a ring */
+export const CARDINAL_SUFFIXES = ['Front', 'Back', 'Left', 'Right'] as const;
