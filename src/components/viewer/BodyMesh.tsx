@@ -24,7 +24,7 @@ const SEGMENT_COLORS: Record<string, Color> = {
 export default function BodyMesh() {
   const meshRef = useRef<Mesh>(null);
   const scanData = useScanStore((s) => s.scanData);
-  const useSmpl = useSmplStore((s) => s.useSmpl);
+  const smplConstraints = useSmplStore((s) => s.constraints);
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
   const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
@@ -57,7 +57,8 @@ export default function BodyMesh() {
       scanData.rings,
       deltaBodyFat,
       segmentOverrides,
-      scanData.adjacency
+      scanData.adjacency,
+      smplConstraints
     );
 
     positions.needsUpdate = true;
@@ -85,8 +86,6 @@ export default function BodyMesh() {
     }
   }, [scanData, clonedGeometry, segmentHighlight, hoveredSegment]);
 
-  // Hide Phase 1 mesh when SMPL model is active
-  if (useSmpl) return null;
   if (!scanData || !clonedGeometry) return null;
 
   const handlePointerMove = (e: { intersections: Intersection[] }) => {

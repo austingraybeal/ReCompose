@@ -9,19 +9,18 @@ const GENDER_OPTIONS: { id: SMPLGender; label: string }[] = [
 ];
 
 /**
- * Body model panel: gender selector + SMPL/Scan engine toggle.
- * Models auto-load from public/models/ on app boot.
+ * Gender selector for SMPL body constraints.
+ * Selecting male/female loads the corresponding SMPL model which
+ * provides anatomically-informed deformation limits for the scan.
  */
 export default function SMPLModelLoader() {
-  const modelData = useSmplStore((s) => s.modelData);
   const isLoading = useSmplStore((s) => s.isLoading);
-  const useSmpl = useSmplStore((s) => s.useSmpl);
   const gender = useSmplStore((s) => s.gender);
+  const constraints = useSmplStore((s) => s.constraints);
   const availableGenders = useSmplStore((s) => s.availableGenders);
   const setGender = useSmplStore((s) => s.setGender);
-  const setUseSmpl = useSmplStore((s) => s.setUseSmpl);
 
-  // Don't show if no models available and not loading
+  // Don't show if no models available
   if (availableGenders.size === 0 && !isLoading) return null;
 
   return (
@@ -30,14 +29,14 @@ export default function SMPLModelLoader() {
         className="text-[10px] uppercase tracking-[3px] px-1 mb-0.5 font-mono"
         style={{ color: 'var(--rc-text-dim)' }}
       >
-        Body Model
+        Body Type
       </div>
 
       {/* Gender selector */}
       <div className="flex gap-1.5">
         {GENDER_OPTIONS.map((opt) => {
           const available = availableGenders.has(opt.id);
-          const active = gender === opt.id && modelData?.gender === opt.id;
+          const active = gender === opt.id && constraints !== null;
           return (
             <button
               key={opt.id}
@@ -66,65 +65,9 @@ export default function SMPLModelLoader() {
         })}
       </div>
 
-      {/* Status line */}
-      <div
-        className="flex items-center gap-2 px-2 py-1 rounded-lg text-[10px] font-mono"
-        style={{
-          background: 'var(--rc-bg-elevated)',
-          border: '1px solid var(--rc-border-default)',
-          color: modelData ? 'var(--rc-text-dim)' : 'var(--rc-text-dim)',
-        }}
-      >
-        <div
-          className="w-1.5 h-1.5 rounded-full shrink-0"
-          style={{
-            background: isLoading
-              ? 'var(--rc-text-dim)'
-              : useSmpl && modelData
-                ? 'var(--rc-accent)'
-                : 'rgba(255,255,255,0.15)',
-          }}
-        />
-        {isLoading
-          ? 'Loading...'
-          : modelData
-            ? `SMPL · ${modelData.vertexCount.toLocaleString()} vertices`
-            : 'No model available'}
-      </div>
-
-      {/* Engine toggle: SMPL vs Scan */}
-      {modelData && (
-        <div className="flex gap-1.5">
-          <button
-            onClick={() => setUseSmpl(true)}
-            className="flex-1 px-2 py-1.5 rounded-lg text-rc-xs font-mono transition-all duration-200 text-center"
-            style={{
-              background: useSmpl
-                ? 'linear-gradient(135deg, rgba(62, 207, 180, 0.15), rgba(62, 207, 180, 0.05))'
-                : 'var(--rc-bg-elevated)',
-              color: useSmpl ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
-              border: useSmpl
-                ? '1px solid rgba(62, 207, 180, 0.25)'
-                : '1px solid var(--rc-border-default)',
-            }}
-          >
-            SMPL
-          </button>
-          <button
-            onClick={() => setUseSmpl(false)}
-            className="flex-1 px-2 py-1.5 rounded-lg text-rc-xs font-mono transition-all duration-200 text-center"
-            style={{
-              background: !useSmpl
-                ? 'linear-gradient(135deg, rgba(62, 207, 180, 0.15), rgba(62, 207, 180, 0.05))'
-                : 'var(--rc-bg-elevated)',
-              color: !useSmpl ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
-              border: !useSmpl
-                ? '1px solid rgba(62, 207, 180, 0.25)'
-                : '1px solid var(--rc-border-default)',
-            }}
-          >
-            Scan
-          </button>
+      {isLoading && (
+        <div className="text-[10px] px-1 font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+          Loading...
         </div>
       )}
     </div>

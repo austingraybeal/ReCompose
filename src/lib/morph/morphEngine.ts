@@ -1,34 +1,60 @@
 import type { LandmarkRing, VertexBinding, SegmentOverrides } from '@/types/scan';
+import type { SMPLConstraints } from '@/lib/smpl/constraints';
+import { smplSensitivity, smplScaleLimits } from '@/lib/smpl/constraints';
 import { ARM_SENSITIVITY } from './sensitivityModel';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 
-/** Minimum and maximum scale factors to keep the body humanoid */
+/** Fallback minimum and maximum scale factors (used when no SMPL constraints) */
 const MIN_SCALE = 0.75;
 const MAX_SCALE = 1.55;
 
 /**
- * Smooth sensitivity profile. Returns how much a region changes per 1% BF.
- * Uses overlapping Gaussians with a base floor so the entire body responds.
- * Increased peaks for more dramatic, realistic deformation at high BF%.
+ * Fallback sensitivity profile (hand-tuned Gaussians).
+ * Used when no SMPL model is loaded.
  */
-function sensitivity(y: number): number {
+function fallbackSensitivity(y: number): number {
   const BASE = 0.18;
 
   const g = (center: number, sigma: number, peak: number) =>
     peak * Math.exp(-((y - center) ** 2) / (2 * sigma * sigma));
 
   return BASE
-    + g(0.54, 0.09, 0.88)   // waist/belly (wider + stronger)
-    + g(0.43, 0.08, 0.65)   // hips (wider + stronger)
+    + g(0.54, 0.09, 0.88)   // waist/belly
+    + g(0.43, 0.08, 0.65)   // hips
     + g(0.64, 0.07, 0.50)   // bust/chest
-    + g(0.32, 0.09, 0.50)   // upper thighs (wider)
+    + g(0.32, 0.09, 0.50)   // upper thighs
     + g(0.15, 0.10, 0.20)   // calves
     + g(0.74, 0.08, 0.30);  // upper chest/shoulders
 }
 
 /**
+ * Get sensitivity at height y, using SMPL constraints if available.
+ * SMPL sensitivity is scaled to match the same units as fallback.
+ */
+function getSensitivity(y: number, constraints: SMPLConstraints | null): number {
+  if (!constraints) return fallbackSensitivity(y);
+
+  // SMPL sensitivity is fractional change per unit beta.
+  // Scale it so the overall deformation magnitude matches Phase 1.
+  // The fallback peaks at ~1.06, SMPL peaks at ~0.03-0.05.
+  // We multiply SMPL values to bring them into the same range.
+  const smplSens = smplSensitivity(constraints, y);
+  const scaled = smplSens * 20; // Scale up to match Phase 1 sensitivity units
+
+  // Blend with a base floor so the entire body responds
+  return Math.max(0.15, scaled);
+}
+
+/**
+ * Get scale limits at height y, using SMPL constraints if available.
+ */
+function getScaleLimits(y: number, constraints: SMPLConstraints | null): [number, number] {
+  if (!constraints) return [MIN_SCALE, MAX_SCALE];
+  return smplScaleLimits(constraints, y);
+}
+
+/**
  * Gaussian-blended segment override at normalized Y height.
- * Shoulders override now blends into torso region (they share influence).
  */
 function blendedSegmentOverride(y: number, overrides: SegmentOverrides): number {
   let totalWeight = 0;
@@ -59,9 +85,7 @@ function directionalScale(dx: number, dz: number, scale: number): number {
 }
 
 /**
- * Laplacian smoothing pass. Moves each vertex toward the average of its
- * mesh neighbors, preserving surface continuity and eliminating artifacts.
- * Smooths X, Y, and Z to better handle hip/leg boundary tears.
+ * Laplacian smoothing pass.
  */
 function laplacianSmooth(
   positions: Float32Array,
@@ -89,7 +113,6 @@ function laplacianSmooth(
       avgX /= neighbors.length;
       avgZ /= neighbors.length;
 
-      // Move toward average (X and Z, preserve Y to maintain height)
       positions[i * 3] = temp[i * 3] + lambda * (avgX - temp[i * 3]);
       positions[i * 3 + 1] = temp[i * 3 + 1]; // preserve Y
       positions[i * 3 + 2] = temp[i * 3 + 2] + lambda * (avgZ - temp[i * 3 + 2]);
@@ -98,15 +121,12 @@ function laplacianSmooth(
 }
 
 /**
- * Main deformation function with physiological constraints.
+ * Main deformation function.
  *
- * Key changes from earlier versions:
- * - Higher scale range (0.65–1.55) for realistic high-BF deformation
- * - Stronger sensitivity peaks so 55% BF looks dramatically different
- * - Shoulders override automatically applied to arms (they scale together)
- * - Arms scale volumetrically (both lateral and front-to-back)
- * - Much wider Gaussian blending at segment boundaries to prevent holes
- * - Aggressive Laplacian smoothing to eliminate tears
+ * When SMPL constraints are provided, uses SMPL-learned sensitivity curves
+ * and per-height scale limits instead of hand-tuned values. This ensures
+ * the user's scan mesh deforms anatomically — SMPL provides the "rules",
+ * the scan mesh is what's actually rendered.
  */
 export function deformMesh(
   positions: Float32Array,
@@ -115,7 +135,8 @@ export function deformMesh(
   rings: LandmarkRing[],
   deltaBodyFat: number,
   overrides: SegmentOverrides,
-  adjacency?: Uint32Array[]
+  adjacency?: Uint32Array[],
+  constraints?: SMPLConstraints | null
 ): void {
   // Compute center axis
   let axisCX = 0, axisCZ = 0;
@@ -142,13 +163,13 @@ export function deformMesh(
   const rightCZ = rCount > 0 ? rArmZ / rCount : axisCZ;
 
   // Arms are influenced by BOTH the arms override AND the shoulders override
-  // (increasing shoulders should make the whole upper body including arms larger)
   const armOverrideCombined = overrides.arms + overrides.shoulders * 0.5;
   const armGlobal = 1 + (deltaBodyFat * ARM_SENSITIVITY / 100);
   const armRegional = 1 + (armOverrideCombined / 100);
-  const armScaleBase = Math.max(MIN_SCALE, Math.min(MAX_SCALE, armGlobal * armRegional));
+  const [armMin, armMax] = getScaleLimits(0.65, constraints ?? null);
+  const armScaleBase = Math.max(armMin, Math.min(armMax, armGlobal * armRegional));
 
-  // Phase 1: Radial displacement with clamped scaling
+  // Phase 1: Radial displacement with SMPL-informed scaling
   for (let i = 0; i < vertexCount; i++) {
     const binding = bindings[i];
     const ox = originalPositions[i * 3];
@@ -165,38 +186,34 @@ export function deformMesh(
     let cx: number, cz: number, combinedScale: number;
 
     if (binding.segmentId === 'arms') {
-      // Compute arm-local center
       const armCX = ox < axisCX ? leftCX : rightCX;
       const armCZ = ox < axisCX ? leftCZ : rightCZ;
 
-      // Near the shoulder junction (high Y), blend arm center → torso center
-      // and arm scale → torso scale to prevent tearing.
-      // Full arm-center below y=0.58, full torso-center above y=0.68
       const junctionBlend = Math.min(1, Math.max(0, (oy - 0.58) / 0.10));
       cx = armCX + junctionBlend * (axisCX - armCX);
       cz = armCZ + junctionBlend * (axisCZ - armCZ);
 
-      // Compute what the torso scale would be at this height
-      const torsoSens = sensitivity(oy);
+      const torsoSens = getSensitivity(oy, constraints ?? null);
       const torsoGlobalScale = 1 + (deltaBodyFat * torsoSens / 100);
       const torsoOverride = blendedSegmentOverride(oy, overrides);
       const torsoRegionalScale = 1 + torsoOverride / 100;
-      const torsoScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, torsoGlobalScale * torsoRegionalScale));
+      const [tMin, tMax] = getScaleLimits(oy, constraints ?? null);
+      const torsoScale = Math.max(tMin, Math.min(tMax, torsoGlobalScale * torsoRegionalScale));
 
-      // Blend between arm scale and torso scale near the junction
       combinedScale = armScaleBase + junctionBlend * (torsoScale - armScaleBase);
     } else {
       cx = axisCX;
       cz = axisCZ;
 
-      const sens = sensitivity(oy);
+      const sens = getSensitivity(oy, constraints ?? null);
       const globalScale = 1 + (deltaBodyFat * sens / 100);
       const overrideValue = blendedSegmentOverride(oy, overrides);
       const regionalScale = 1 + overrideValue / 100;
       combinedScale = globalScale * regionalScale;
 
-      // Clamp to physiological range
-      combinedScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, combinedScale));
+      // Clamp to SMPL-derived limits (or fallback)
+      const [sMin, sMax] = getScaleLimits(oy, constraints ?? null);
+      combinedScale = Math.max(sMin, Math.min(sMax, combinedScale));
     }
 
     const dx = ox - cx;
@@ -215,11 +232,10 @@ export function deformMesh(
     }
   }
 
-  // Phase 2: Laplacian smoothing to eliminate artifacts and tears
+  // Phase 2: Laplacian smoothing
   if (adjacency && adjacency.length === vertexCount) {
     const deformMagnitude = Math.abs(deltaBodyFat) +
       Object.values(overrides).reduce((s, v) => s + Math.abs(v), 0) / 4;
-    // More aggressive smoothing: 3-6 iterations based on deformation
     const iterations = deformMagnitude > 15 ? 6 : deformMagnitude > 8 ? 5 : deformMagnitude > 3 ? 4 : 3;
     const lambda = 0.50;
     laplacianSmooth(positions, originalPositions, adjacency, iterations, lambda);
