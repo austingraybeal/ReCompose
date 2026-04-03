@@ -25,17 +25,26 @@ export function projectMetrics(
 ): ProjectedMetrics {
   const deltaBF = currentBF - originalBF;
 
-  // Weight projection
-  const deltaFatMass = (deltaBF / 100) * bodyComp.weight;
-  // Regional overrides affect weight: waist/hip overrides have higher impact
+  // Weight projection — fat mass changes proportionally to BF% delta.
+  // A 32% BF increase (23→55%) on a 235lb person should add ~75-100 lbs.
+  // Formula: new weight = originalWeight * (1 - originalBF/100 + currentBF/100) / (1)
+  // This assumes lean mass stays constant and only fat mass changes.
+  const originalFatFraction = originalBF / 100;
+  const leanMass = bodyComp.weight * (1 - originalFatFraction);
+  const newFatFraction = currentBF / 100;
+  // New total weight = leanMass / (1 - newFatFraction), clamped to avoid division issues
+  const clampedNewFatFraction = Math.min(newFatFraction, 0.65);
+  const baseWeight = leanMass / (1 - clampedNewFatFraction);
+
+  // Regional overrides add additional weight shifts
   const regionalWeightDelta =
-    (overrides.waist * 0.003 +
-     overrides.hips * 0.002 +
-     overrides.torso * 0.002 +
-     overrides.legs * 0.001 +
+    (overrides.waist * 0.004 +
+     overrides.hips * 0.003 +
+     overrides.torso * 0.003 +
+     overrides.legs * 0.002 +
      overrides.shoulders * 0.001 +
-     overrides.arms * 0.0005) * bodyComp.weight / 100;
-  const estimatedWeight = Math.max(0, bodyComp.weight + deltaFatMass + regionalWeightDelta);
+     overrides.arms * 0.001) * bodyComp.weight / 100;
+  const estimatedWeight = Math.max(0, baseWeight + regionalWeightDelta);
 
   // Height in meters (estimate from scan or body comp)
   const heightM = bodyComp.weight > 0 && bodyComp.bmi > 0
