@@ -1,13 +1,12 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useViewStore } from '@/lib/stores/viewStore';
 import { deformMesh } from '@/lib/morph/morphEngine';
-import { SEGMENTS } from '@/lib/constants/segmentDefs';
-import type { Mesh, BufferGeometry, Intersection } from 'three';
+import type { Mesh, Intersection } from 'three';
 import { Color, BufferAttribute } from 'three';
 
 const MESH_COLOR = new Color('#c4a882');
@@ -33,12 +32,17 @@ export default function BodyMesh() {
   const setHoveredSegment = useViewStore((s) => s.setHoveredSegment);
   const setFocusedSegment = useViewStore((s) => s.setFocusedSegment);
 
+  // Clone geometry ONCE when scanData changes, not every render
+  const clonedGeometry = useMemo(() => {
+    if (!scanData) return null;
+    return scanData.geometry.clone();
+  }, [scanData]);
+
   // Apply morph deformation
   useFrame(() => {
-    if (!meshRef.current || !scanData) return;
+    if (!meshRef.current || !scanData || !clonedGeometry) return;
 
-    const geometry = meshRef.current.geometry;
-    const positions = geometry.getAttribute('position');
+    const positions = clonedGeometry.getAttribute('position');
     if (!positions) return;
 
     const posArray = positions.array as Float32Array;
@@ -54,13 +58,12 @@ export default function BodyMesh() {
     );
 
     positions.needsUpdate = true;
-    geometry.computeVertexNormals();
+    clonedGeometry.computeVertexNormals();
   });
 
   // Apply segment highlight colors
   useEffect(() => {
-    if (!meshRef.current || !scanData) return;
-    const geometry = meshRef.current.geometry;
+    if (!clonedGeometry || !scanData) return;
 
     if (segmentHighlight) {
       const colors = new Float32Array(scanData.vertexBindings.length * 3);
@@ -73,23 +76,21 @@ export default function BodyMesh() {
         colors[i * 3 + 1] = color.g * intensity + MESH_COLOR.g * (1 - intensity);
         colors[i * 3 + 2] = color.b * intensity + MESH_COLOR.b * (1 - intensity);
       }
-      geometry.setAttribute('color', new BufferAttribute(colors, 3));
+      clonedGeometry.setAttribute('color', new BufferAttribute(colors, 3));
     } else {
-      geometry.deleteAttribute('color');
+      clonedGeometry.deleteAttribute('color');
     }
-  }, [scanData, segmentHighlight, hoveredSegment]);
+  }, [scanData, clonedGeometry, segmentHighlight, hoveredSegment]);
 
-  if (!scanData) return null;
+  if (!scanData || !clonedGeometry) return null;
 
   const handlePointerMove = (e: { intersections: Intersection[] }) => {
     if (!segmentHighlight || !scanData) return;
-    e.intersections[0]?.face;
     const intersection = e.intersections[0];
     if (!intersection?.face) {
       setHoveredSegment(null);
       return;
     }
-    // Use face vertex index to determine segment
     const idx = intersection.face.a;
     const binding = scanData.vertexBindings[idx];
     if (binding) {
@@ -115,7 +116,7 @@ export default function BodyMesh() {
   return (
     <mesh
       ref={meshRef}
-      geometry={scanData.geometry.clone()}
+      geometry={clonedGeometry}
       onPointerMove={handlePointerMove}
       onPointerOut={handlePointerOut}
       onClick={handleClick}
