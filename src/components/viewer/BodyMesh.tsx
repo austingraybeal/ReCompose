@@ -5,7 +5,7 @@ import { useFrame } from '@react-three/fiber';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useViewStore } from '@/lib/stores/viewStore';
-import { useSmplStore } from '@/lib/stores/smplStore';
+import { useGenderStore } from '@/lib/stores/genderStore';
 import { deformMesh } from '@/lib/morph/morphEngine';
 import type { Mesh, Intersection } from 'three';
 import { Color, BufferAttribute } from 'three';
@@ -33,8 +33,8 @@ export default function BodyMesh() {
   const setHoveredSegment = useViewStore((s) => s.setHoveredSegment);
   const setFocusedSegment = useViewStore((s) => s.setFocusedSegment);
 
-  // Read gender from SMPL store for gender-specific sensitivity curves
-  const gender = useSmplStore((s) => s.gender);
+  // Read gender for gender-specific sensitivity curves
+  const gender = useGenderStore((s) => s.gender);
 
   // Clone geometry ONCE when scanData changes, not every render
   const clonedGeometry = useMemo(() => {

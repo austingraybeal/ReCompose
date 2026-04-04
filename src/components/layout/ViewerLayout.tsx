@@ -6,9 +6,8 @@ import ViewControls from '@/components/ui/ViewControls';
 import RegionalPanel from '@/components/ui/RegionalPanel';
 import MetricsPanel from '@/components/ui/MetricsPanel';
 import GlobalSlider from '@/components/ui/GlobalSlider';
-import SMPLModelLoader from '@/components/ui/SMPLModelLoader';
+import BodyTypeSelector from '@/components/ui/BodyTypeSelector';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
-import { useSmplInit } from '@/hooks/useSmplInit';
 
 const SceneCanvas = dynamic(
   () => import('@/components/viewer/SceneCanvas'),
@@ -22,7 +21,6 @@ const AssessmentOverlay = dynamic(
 
 export default function ViewerLayout() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  useSmplInit();
   const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
   const currentStep = useAssessmentStore((s) => s.currentStep);
 
@@ -47,7 +45,7 @@ export default function ViewerLayout() {
           >
             <ViewControls />
             <div style={{ borderTop: '1px solid var(--rc-border-subtle)' }} />
-            <SMPLModelLoader />
+            <BodyTypeSelector />
             <div style={{ borderTop: '1px solid var(--rc-border-subtle)' }} />
             <RegionalPanel />
           </aside>

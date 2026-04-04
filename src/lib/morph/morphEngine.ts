@@ -1,11 +1,6 @@
 import type { LandmarkRing, VertexBinding, SegmentOverrides } from '@/types/scan';
+import type { BodyGender } from '@/lib/stores/genderStore';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
-
-// ════════════════════════════════════════════════════════════════
-// Types
-// ════════════════════════════════════════════════════════════════
-
-export type BodyGender = 'male' | 'female' | 'neutral';
 
 // ════════════════════════════════════════════════════════════════
 // Constants

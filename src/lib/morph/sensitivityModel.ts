@@ -3,32 +3,23 @@
  *
  * These values represent how much a ring's circumference changes per 1% body fat change.
  * Higher values = more responsive to fat changes (e.g., waist area).
- * Based on published allometric scaling research.
+ * Used by metric projection and segment blending (NOT the main morph engine).
  */
 export const RING_SENSITIVITY: Record<string, number> = {
-  // Shoulders segment
   HeadCircum: 0.00,
   Collar: 0.10,
   OverArm: 0.40,
-
-  // Torso segment
   Bust: 0.55,
   BustWithDrop: 0.55,
   UnderBust: 0.65,
-
-  // Waist segment (highest — primary fat depot)
   Waist: 1.50,
   WaistAt50: 1.50,
   StomachFP: 1.60,
   StomachMax: 1.60,
   Abdomen: 1.40,
-
-  // Hips segment
   Seat: 1.10,
   Hip: 1.05,
   HipWidest: 1.00,
-
-  // Legs segment (gradient: high proximal → low distal)
   UpperLeftThigh: 0.80,
   UpperRightThigh: 0.80,
   MidLeftThigh: 0.50,

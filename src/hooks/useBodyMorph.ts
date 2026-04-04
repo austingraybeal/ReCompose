@@ -3,7 +3,7 @@
 import { useCallback, useRef } from 'react';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
-import { useSmplStore } from '@/lib/stores/smplStore';
+import { useGenderStore } from '@/lib/stores/genderStore';
 import { deformMesh } from '@/lib/morph/morphEngine';
 import type { BufferGeometry } from 'three';
 
@@ -16,7 +16,7 @@ export function useBodyMorph() {
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
   const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
-  const gender = useSmplStore((s) => s.gender);
+  const gender = useGenderStore((s) => s.gender);
   const lastUpdateRef = useRef(0);
 
   const applyMorph = useCallback((geometry: BufferGeometry) => {
