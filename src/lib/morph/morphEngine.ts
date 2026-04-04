@@ -74,10 +74,10 @@ function sensitivityFemale(y: number): number {
 
   return BASE
     + g(0.53, 0.09, 0.82)   // waist/belly — less than male
-    + g(0.44, 0.09, 0.90)   // hips — strong, wider sigma
+    + g(0.44, 0.09, 0.82)   // hips — strong but not excessive lateral
     + g(0.62, 0.11, 0.82)   // bust — wide sigma, strong for female chest
     + g(0.34, 0.10, 0.75)   // upper thighs — wider to overlap with hips
-    + g(0.20, 0.10, 0.42)   // calves — substantial scaling
+    + g(0.20, 0.10, 0.52)   // calves/tibial — more volume
     + g(0.72, 0.08, 0.26)   // upper chest/shoulders
     + g(0.07, 0.05, 0.22);  // ankles — cankles at high BF%
 }
@@ -131,8 +131,8 @@ function directionalScale(y: number, zDir: number, xDir: number, scale: number, 
     bellyBias = g(0.53, 0.07, 0.25) + g(0.48, 0.06, 0.18);
     bustBias = g(0.62, 0.08, 0.40);
     thighBias = g(0.34, 0.06, 0.18);
-    hipLateral = g(0.44, 0.08, 0.30);
-    thighLateral = g(0.33, 0.08, 0.18);
+    hipLateral = g(0.44, 0.08, 0.18);    // reduced — hips were too pointy lateral
+    thighLateral = g(0.33, 0.08, 0.10);  // reduced — let medial fill handle inner thigh
     backDamp = g(0.53, 0.10, 0.12);
   } else {
     bellyBias = g(0.53, 0.07, 0.35) + g(0.48, 0.06, 0.25);
@@ -370,6 +370,36 @@ export function deformMesh(
       positions[i * 3 + 2] = cz + dz * finalScale;
     } else {
       positions[i * 3] = ox; positions[i * 3 + 1] = oy; positions[i * 3 + 2] = oz;
+    }
+  }
+
+  // ── Medial thigh fill ──
+  // Radial scaling from body center pushes inner thigh vertices outward,
+  // but anatomically fat accumulates BETWEEN the thighs (adductors).
+  // This additive pass pushes medial thigh/leg vertices toward center,
+  // simulating inner thigh fat fill so thighs touch at high BF%.
+  if (Math.abs(deltaBodyFat) > 1) {
+    const fillStrength = gender === 'female' ? 0.06 : gender === 'male' ? 0.025 : 0.04;
+    const medialThreshold = 0.10; // vertices closer than this to center get fill
+
+    for (let i = 0; i < vertexCount; i++) {
+      const oy = originalPositions[i * 3 + 1];
+      if (oy < 0.12 || oy > 0.42) continue; // only thigh/knee/upper-calf zone
+      if (bindings[i]?.segmentId === 'arms') continue;
+
+      const px = positions[i * 3];
+      const medialDist = Math.abs(px - axisCX);
+      if (medialDist >= medialThreshold) continue;
+
+      // Height taper: strongest near crotch (0.42), fading toward mid-calf (0.12)
+      const ht = Math.min(1, Math.max(0, (oy - 0.12) / (0.42 - 0.12)));
+      const htSmooth = ht * ht * (3 - 2 * ht); // smoothstep
+      // How medial: 1.0 at center, 0.0 at threshold
+      const medialFactor = 1.0 - (medialDist / medialThreshold);
+      const fill = (deltaBodyFat / 100) * fillStrength * htSmooth * medialFactor;
+      // Push TOWARD center — inner thigh fattens inward
+      const sign = px < axisCX ? 1 : -1;
+      positions[i * 3] += sign * Math.abs(fill);
     }
   }
 
