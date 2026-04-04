@@ -1,13 +1,15 @@
 /**
  * Hybrid Morph Engine — combines SMPL-derived displacement fields with
- * anatomical fat depot modeling for realistic body composition visualization.
+ * anatomical fat depot modeling and per-segment radial control for
+ * realistic body composition visualization.
  *
  * When SMPL data is available:
  *   1. Maps UI parameters → SMPL betas via parameterMapper
  *   2. Samples displacement field for each vertex (primary deformation)
- *   3. Layers anatomical fat depot displacements on top
- *   4. Applies gravity-aware soft tissue sag
- *   5. Runs Laplacian smoothing
+ *   3. Applies per-segment radial scaling from segment overrides
+ *   4. Layers anatomical fat depot displacements on top
+ *   5. Applies gravity-aware soft tissue sag
+ *   6. Runs Laplacian smoothing
  *
  * When SMPL data is NOT available:
  *   Falls back to the radial deformation approach from morphEngine.ts
@@ -34,21 +36,39 @@ const LEG_BLEND_LOW = 0.32;
 const LEG_BLEND_HIGH = 0.44;
 
 // ════════════════════════════════════════════════════════════════
-// Pre-allocated buffers (avoid per-frame allocations)
+// Pre-allocated buffers
 // ════════════════════════════════════════════════════════════════
 
-/** Reusable buffer for sampleDisplacement output */
-let _smplDisp: [number, number, number] = [0, 0, 0];
-
-/** Reusable buffer for depot displacement output */
 const _depotDisp: [number, number, number] = [0, 0, 0];
-
-/** Cached betas array — reallocated only when component count changes */
 let _cachedBetas: Float32Array | null = null;
-let _cachedBetasComponentCount = 0;
+let _cachedBetasCount = 0;
 
 // ════════════════════════════════════════════════════════════════
-// Fallback sensitivity (same as morphEngine.ts)
+// Crotch dampening for SMPL displacement field
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Dampen SMPL displacement in the crotch zone to prevent gender-specific
+ * geometry from the SMPL template leaking into the scan mesh.
+ */
+function dampenSmplCrotch(
+  normalizedY: number,
+  centerDistX: number,
+  dx: number,
+  dz: number
+): [number, number] {
+  if (normalizedY > 0.48 || normalizedY < 0.30) return [dx, dz];
+  if (centerDistX > 0.06) return [dx, dz];
+
+  const crotchCenter = 0.39;
+  const crotchSigma = 0.05;
+  const dampen = Math.exp(-((normalizedY - crotchCenter) ** 2) / (2 * crotchSigma * crotchSigma));
+  const factor = 1 - dampen * 0.90;
+  return [dx * factor, dz * factor];
+}
+
+// ════════════════════════════════════════════════════════════════
+// Fallback sensitivity (from morphEngine.ts)
 // ════════════════════════════════════════════════════════════════
 
 function fallbackSensitivity(y: number): number {
@@ -66,7 +86,7 @@ function fallbackSensitivity(y: number): number {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Fallback directional scale (same as morphEngine.ts)
+// Fallback directional scale (from morphEngine.ts)
 // ════════════════════════════════════════════════════════════════
 
 function directionalScale(y: number, zDir: number, xDir: number, scale: number): number {
@@ -99,9 +119,14 @@ function directionalScale(y: number, zDir: number, xDir: number, scale: number):
 }
 
 // ════════════════════════════════════════════════════════════════
-// Segment override blending
+// Segment override blending — used by BOTH paths
 // ════════════════════════════════════════════════════════════════
 
+/**
+ * Compute a blended segment override value at a given normalized Y height.
+ * Uses Gaussian blending across all segment centers.
+ * Returns a value that should be used as a radial scale factor.
+ */
 function blendedSegmentOverride(y: number, overrides: SegmentOverrides): number {
   let totalWeight = 0;
   let blendedValue = 0;
@@ -118,7 +143,7 @@ function blendedSegmentOverride(y: number, overrides: SegmentOverrides): number 
 }
 
 // ════════════════════════════════════════════════════════════════
-// Laplacian smoothing (same as morphEngine.ts)
+// Laplacian smoothing
 // ════════════════════════════════════════════════════════════════
 
 function laplacianSmooth(
@@ -149,7 +174,7 @@ function laplacianSmooth(
 }
 
 // ════════════════════════════════════════════════════════════════
-// Center computation helpers (same as morphEngine.ts)
+// Center helpers
 // ════════════════════════════════════════════════════════════════
 
 function computeArmCenters(
@@ -187,24 +212,13 @@ function computeLegCenters(
 }
 
 // ════════════════════════════════════════════════════════════════
-// Main hybrid deformation entry point
+// Main hybrid deformation
 // ════════════════════════════════════════════════════════════════
 
 /**
  * Deform the scan mesh using SMPL displacement fields (when available)
- * with anatomical fat depot overlays and gravity sag, falling back to
- * the radial deformation approach when SMPL data is not loaded.
- *
- * @param positions         - Mutable vertex positions to write to
- * @param originalPositions - Original undeformed vertex positions
- * @param bindings          - Per-vertex segment bindings
- * @param rings             - Landmark ring data for body axis computation
- * @param deltaBodyFat      - Change in body fat % from baseline
- * @param overrides         - Per-segment slider overrides
- * @param adjacency         - Per-vertex adjacency lists for Laplacian smoothing
- * @param displacementField - SMPL displacement field (null = use fallback)
- * @param constraints       - SMPL constraints (null = use fallback sensitivity)
- * @param componentCount    - Number of SMPL shape components (typically 10)
+ * with per-segment radial control, anatomical fat depot overlays, and
+ * gravity sag. Falls back to radial deformation when SMPL is unavailable.
  */
 export function deformMeshHybrid(
   positions: Float32Array,
@@ -229,24 +243,29 @@ export function deformMeshHybrid(
     axisCZ /= rings.length;
   }
 
-  // Compute betas from UI parameters (only when SMPL is available)
+  // Compute betas when SMPL available
   let betas: Float32Array | null = null;
   if (useSMPL) {
-    if (_cachedBetasComponentCount !== componentCount) {
+    if (_cachedBetasCount !== componentCount) {
       _cachedBetas = new Float32Array(componentCount);
-      _cachedBetasComponentCount = componentCount;
+      _cachedBetasCount = componentCount;
     }
-    betas = mapToBetas(deltaBodyFat, overrides, componentCount);
-    // Copy to cached for reuse if needed
+    // mapToBetas uses ONLY deltaBodyFat for SMPL (not segment overrides for betas —
+    // segment overrides are handled separately via radial scaling below)
+    const zeroed: SegmentOverrides = { shoulders: 0, arms: 0, torso: 0, waist: 0, hips: 0, legs: 0 };
+    betas = mapToBetas(deltaBodyFat, zeroed, componentCount);
     _cachedBetas!.set(betas);
     betas = _cachedBetas!;
   }
 
-  // Arm/leg centers for fallback radial path
+  // Check if ANY segment override is non-zero
+  const hasOverrides = Object.values(overrides).some(v => Math.abs(v) > 0.01);
+
+  // Arm/leg centers
   const arms = computeArmCenters(originalPositions, bindings, vertexCount, axisCX, axisCZ);
   const legs = computeLegCenters(originalPositions, bindings, vertexCount, axisCX, axisCZ);
 
-  // Pre-compute arm scale for fallback
+  // Fallback arm scale
   const armOvDamped = (overrides.arms + overrides.shoulders * 0.5) * SEGMENT_OVERRIDE_STRENGTH;
   const fallbackArmScale = Math.max(FALLBACK_MIN_SCALE, Math.min(FALLBACK_MAX_SCALE,
     (1 + deltaBodyFat * ARM_SENSITIVITY / 100) * (1 + armOvDamped / 100)));
@@ -271,15 +290,70 @@ export function deformMeshHybrid(
       // ═══════════════════════════════════════════════════════════
 
       // 1. Sample SMPL displacement field
-      _smplDisp = sampleDisplacement(
+      let [sdx, sdy, sdz] = sampleDisplacement(
         displacementField!, betas, oy, ox, oz, axisCX, axisCZ
       );
 
-      let nx = ox + _smplDisp[0];
-      let ny = oy + _smplDisp[1];
-      let nz = oz + _smplDisp[2];
+      // 1b. Crotch dampening on SMPL displacement
+      const cDistX = Math.abs(ox - axisCX);
+      [sdx, sdz] = dampenSmplCrotch(oy, cDistX, sdx, sdz);
 
-      // 2. Layer fat depot displacements
+      let nx = ox + sdx;
+      let ny = oy + sdy;
+      let nz = oz + sdz;
+
+      // 2. Per-segment radial scaling from segment overrides
+      //    This is what makes the segment sliders actually work in SMPL mode
+      if (hasOverrides) {
+        const segOv = blendedSegmentOverride(oy, overrides);
+        if (Math.abs(segOv) > 0.01) {
+          const segScale = 1 + segOv / 100;
+
+          // Determine radial center (same logic as fallback)
+          let cx: number, cz: number;
+          if (binding.segmentId === 'arms') {
+            const isLeft = ox < axisCX;
+            const armCX = isLeft ? arms.leftCX : arms.rightCX;
+            const armCZ = isLeft ? arms.leftCZ : arms.rightCZ;
+            const jb = Math.min(1, Math.max(0, (oy - 0.58) / 0.10));
+            cx = armCX + jb * (axisCX - armCX);
+            cz = armCZ + jb * (axisCZ - armCZ);
+          } else if (oy < LEG_BLEND_LOW) {
+            const isLeft = ox < axisCX;
+            cx = isLeft ? legs.leftCX : legs.rightCX;
+            cz = isLeft ? legs.leftCZ : legs.rightCZ;
+          } else if (oy < LEG_BLEND_HIGH) {
+            const t = (oy - LEG_BLEND_LOW) / (LEG_BLEND_HIGH - LEG_BLEND_LOW);
+            const bl = t * t * (3 - 2 * t);
+            const isLeft = ox < axisCX;
+            cx = (isLeft ? legs.leftCX : legs.rightCX) + bl * (axisCX - (isLeft ? legs.leftCX : legs.rightCX));
+            cz = (isLeft ? legs.leftCZ : legs.rightCZ) + bl * (axisCZ - (isLeft ? legs.leftCZ : legs.rightCZ));
+          } else {
+            cx = axisCX;
+            cz = axisCZ;
+          }
+
+          // Scale radially from center
+          const rdx = nx - cx;
+          const rdz = nz - cz;
+          nx = cx + rdx * segScale;
+          nz = cz + rdz * segScale;
+        }
+
+        // Arm-specific override (arms have their own flat sensitivity)
+        if (binding.segmentId === 'arms' && Math.abs(overrides.arms) > 0.01) {
+          const isLeft = ox < axisCX;
+          const armCX = isLeft ? arms.leftCX : arms.rightCX;
+          const armCZ = isLeft ? arms.leftCZ : arms.rightCZ;
+          const armScale = 1 + overrides.arms * SEGMENT_OVERRIDE_STRENGTH / 100;
+          const adx = nx - armCX;
+          const adz = nz - armCZ;
+          nx = armCX + adx * armScale;
+          nz = armCZ + adz * armScale;
+        }
+      }
+
+      // 3. Layer fat depot displacements
       const dx = ox - axisCX;
       const dz = oz - axisCZ;
       const radialDist = Math.sqrt(dx * dx + dz * dz);
@@ -288,31 +362,29 @@ export function deformMeshHybrid(
       const isLeftSide = ox < axisCX;
 
       computeDepotDisplacement(
-        deltaBodyFat, oy, vertAngle, radialDist, isArm, isLeftSide, _depotDisp
+        deltaBodyFat, oy, vertAngle, radialDist, isArm, isLeftSide, cDistX, overrides, _depotDisp
       );
 
       nx += _depotDisp[0];
       ny += _depotDisp[1];
       nz += _depotDisp[2];
 
-      // 3. Gravity-aware soft tissue sag
+      // 4. Gravity sag
       const sagCoeff = SAG_COEFFICIENTS[binding.segmentId] ?? 0.00002;
       const absDelta = Math.abs(deltaBodyFat);
       const isLowerHalf = oy < 0.5;
-      const sagOffset = -sagCoeff * absDelta * radialDist * (isLowerHalf ? 1.0 : 0.3);
-      ny += sagOffset;
+      ny += -sagCoeff * absDelta * radialDist * (isLowerHalf ? 1.0 : 0.3);
 
       positions[i * 3] = nx;
       positions[i * 3 + 1] = ny;
       positions[i * 3 + 2] = nz;
     } else {
       // ═══════════════════════════════════════════════════════════
-      // Fallback radial deformation (same as morphEngine.ts)
+      // Fallback radial deformation (from morphEngine.ts)
       // ═══════════════════════════════════════════════════════════
 
       let cx: number, cz: number, baseScale: number;
 
-      // Determine sensitivity and scale limits
       const useSMPLConstraints = constraints !== null;
       const minScale = useSMPLConstraints ? smplScaleLimits(constraints!, oy)[0] : FALLBACK_MIN_SCALE;
       const maxScale = useSMPLConstraints ? smplScaleLimits(constraints!, oy)[1] : FALLBACK_MAX_SCALE;
