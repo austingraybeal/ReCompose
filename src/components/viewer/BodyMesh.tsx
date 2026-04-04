@@ -6,9 +6,7 @@ import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useViewStore } from '@/lib/stores/viewStore';
 import { useSmplStore } from '@/lib/stores/smplStore';
-import { deformMeshHybrid } from '@/lib/morph/hybridMorphEngine';
-import { computeConstraints } from '@/lib/smpl/constraints';
-import type { SMPLConstraints } from '@/lib/smpl/constraints';
+import { deformMesh } from '@/lib/morph/morphEngine';
 import type { Mesh, Intersection } from 'three';
 import { Color, BufferAttribute } from 'three';
 
@@ -35,15 +33,8 @@ export default function BodyMesh() {
   const setHoveredSegment = useViewStore((s) => s.setHoveredSegment);
   const setFocusedSegment = useViewStore((s) => s.setFocusedSegment);
 
-  // SMPL store — displacement field and model data
-  const displacementField = useSmplStore((s) => s.displacementField);
-  const modelData = useSmplStore((s) => s.modelData);
-
-  // Compute SMPL constraints once when modelData loads, memoize result
-  const smplConstraints = useMemo<SMPLConstraints | null>(() => {
-    if (!modelData) return null;
-    return computeConstraints(modelData);
-  }, [modelData]);
+  // Read gender from SMPL store for gender-specific sensitivity curves
+  const gender = useSmplStore((s) => s.gender);
 
   // Clone geometry ONCE when scanData changes, not every render
   const clonedGeometry = useMemo(() => {
@@ -60,9 +51,8 @@ export default function BodyMesh() {
 
     const posArray = positions.array as Float32Array;
     const deltaBodyFat = globalBodyFat - originalBodyFat;
-    const componentCount = modelData?.shapeComponentCount ?? 10;
 
-    deformMeshHybrid(
+    deformMesh(
       posArray,
       scanData.originalPositions,
       scanData.vertexBindings,
@@ -70,9 +60,7 @@ export default function BodyMesh() {
       deltaBodyFat,
       segmentOverrides,
       scanData.adjacency,
-      displacementField,
-      smplConstraints,
-      componentCount
+      gender
     );
 
     positions.needsUpdate = true;
