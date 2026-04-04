@@ -12,68 +12,68 @@ const MAX_SCALE = 1.65;
 /** Segment overrides are damped: +25 slider → ~8.75% change */
 const SEGMENT_OVERRIDE_STRENGTH = 0.35;
 
-/** Arm flat sensitivity (per 1% BF) */
-const ARM_SENSITIVITY = 0.55;
+/**
+ * Per-leg center activation zone (normalized Y).
+ * Per-leg centers only activate BELOW the knee to avoid hip/thigh shelf.
+ * Above this, everything scales from body center axis.
+ */
+const LEG_SPLIT_LOW = 0.20;
+const LEG_SPLIT_HIGH = 0.28;
 
-/** Leg center blend zone (normalized Y) */
-const LEG_BLEND_LOW = 0.32;
-const LEG_BLEND_HIGH = 0.44;
+/**
+ * Arm shoulder junction blend zone.
+ * Arms blend their radial center from arm-center to body-center here.
+ */
+const ARM_JUNCTION_LOW = 0.56;
+const ARM_JUNCTION_HIGH = 0.70;
 
 // ════════════════════════════════════════════════════════════════
 // Gender-aware sensitivity — how much each body height changes per 1% BF
+//
+// EVERY region uses this — arms, legs, torso, everything.
+// The curve is continuous so there are no shelf artifacts.
 // ════════════════════════════════════════════════════════════════
 
-/**
- * Male fat pattern: belly-dominant, less hips/thighs.
- * Android (apple-shaped) fat distribution.
- */
 function sensitivityMale(y: number): number {
   const BASE = 0.22;
   const g = (c: number, s: number, p: number) =>
     p * Math.exp(-((y - c) ** 2) / (2 * s * s));
 
   return BASE
-    + g(0.53, 0.08, 1.10)   // waist/belly — strong (android pattern)
-    + g(0.44, 0.07, 0.55)   // hips — lower than female
-    + g(0.62, 0.06, 0.38)   // chest — less than female bust
-    + g(0.34, 0.08, 0.42)   // upper thighs — lower than female
-    + g(0.22, 0.10, 0.20)   // calves
-    + g(0.72, 0.07, 0.32);  // upper chest/shoulders — slightly more
+    + g(0.53, 0.09, 1.10)   // waist/belly — strong (android)
+    + g(0.44, 0.09, 0.58)   // hips — wider sigma for smooth transition
+    + g(0.62, 0.07, 0.38)   // chest
+    + g(0.34, 0.10, 0.45)   // upper thighs — wider to overlap with hips
+    + g(0.20, 0.10, 0.20)   // calves
+    + g(0.72, 0.08, 0.32);  // upper chest/shoulders
 }
 
-/**
- * Female fat pattern: hips/thighs/bust-dominant, less belly.
- * Gynoid (pear-shaped) fat distribution.
- */
 function sensitivityFemale(y: number): number {
   const BASE = 0.22;
   const g = (c: number, s: number, p: number) =>
     p * Math.exp(-((y - c) ** 2) / (2 * s * s));
 
   return BASE
-    + g(0.53, 0.08, 0.82)   // waist/belly — less than male
-    + g(0.44, 0.07, 0.88)   // hips — strong (gynoid pattern)
-    + g(0.62, 0.06, 0.62)   // bust — stronger than male
-    + g(0.34, 0.08, 0.72)   // upper thighs — much stronger
-    + g(0.22, 0.10, 0.22)   // calves
-    + g(0.72, 0.07, 0.26);  // upper chest/shoulders — less
+    + g(0.53, 0.09, 0.82)   // waist/belly — less than male
+    + g(0.44, 0.09, 0.90)   // hips — strong, wider sigma
+    + g(0.62, 0.07, 0.62)   // bust
+    + g(0.34, 0.10, 0.75)   // upper thighs — wider to overlap with hips
+    + g(0.20, 0.10, 0.22)   // calves
+    + g(0.72, 0.08, 0.26);  // upper chest/shoulders
 }
 
-/**
- * Neutral: average of male/female patterns (original tuning).
- */
 function sensitivityNeutral(y: number): number {
   const BASE = 0.22;
   const g = (c: number, s: number, p: number) =>
     p * Math.exp(-((y - c) ** 2) / (2 * s * s));
 
   return BASE
-    + g(0.53, 0.08, 1.00)   // waist/belly
-    + g(0.44, 0.07, 0.72)   // hips
-    + g(0.62, 0.06, 0.50)   // bust/chest
-    + g(0.34, 0.08, 0.58)   // upper thighs
-    + g(0.22, 0.10, 0.22)   // calves
-    + g(0.72, 0.07, 0.30);  // upper chest/shoulders
+    + g(0.53, 0.09, 1.00)   // waist/belly
+    + g(0.44, 0.09, 0.72)   // hips — wider sigma
+    + g(0.62, 0.07, 0.50)   // bust/chest
+    + g(0.34, 0.10, 0.58)   // upper thighs — wider to overlap
+    + g(0.20, 0.10, 0.22)   // calves
+    + g(0.72, 0.08, 0.30);  // upper chest/shoulders
 }
 
 function sensitivity(y: number, gender: BodyGender): number {
@@ -88,12 +88,6 @@ function sensitivity(y: number, gender: BodyGender): number {
 // Gender-aware directional control — front/back/lateral scaling
 // ════════════════════════════════════════════════════════════════
 
-/**
- * Directional multiplier for realistic fat distribution.
- *
- * Male: stronger belly forward protrusion, less hip lateral.
- * Female: stronger hip lateral expansion, more bust forward, more thigh.
- */
 function directionalScale(y: number, zDir: number, xDir: number, scale: number, gender: BodyGender): number {
   const delta = scale - 1;
   if (Math.abs(delta) < 0.005) return scale;
@@ -106,28 +100,25 @@ function directionalScale(y: number, zDir: number, xDir: number, scale: number, 
   let backDamp: number;
 
   if (gender === 'male') {
-    // Male: stronger belly, less hip/thigh lateral
     bellyBias = g(0.53, 0.07, 0.42) + g(0.48, 0.06, 0.30);
     bustBias = g(0.62, 0.05, 0.10);
     thighBias = g(0.34, 0.06, 0.08);
-    hipLateral = g(0.44, 0.06, 0.12);
-    thighLateral = g(0.33, 0.07, 0.08);
+    hipLateral = g(0.44, 0.08, 0.12);
+    thighLateral = g(0.33, 0.08, 0.08);
     backDamp = g(0.53, 0.10, 0.18);
   } else if (gender === 'female') {
-    // Female: stronger hips/thighs lateral, more bust, less belly
     bellyBias = g(0.53, 0.07, 0.25) + g(0.48, 0.06, 0.18);
     bustBias = g(0.62, 0.05, 0.28);
     thighBias = g(0.34, 0.06, 0.18);
-    hipLateral = g(0.44, 0.06, 0.30);
-    thighLateral = g(0.33, 0.07, 0.18);
+    hipLateral = g(0.44, 0.08, 0.30);
+    thighLateral = g(0.33, 0.08, 0.18);
     backDamp = g(0.53, 0.10, 0.12);
   } else {
-    // Neutral: original values
     bellyBias = g(0.53, 0.07, 0.35) + g(0.48, 0.06, 0.25);
     bustBias = g(0.62, 0.05, 0.18);
     thighBias = g(0.34, 0.06, 0.12);
-    hipLateral = g(0.44, 0.06, 0.20);
-    thighLateral = g(0.33, 0.07, 0.12);
+    hipLateral = g(0.44, 0.08, 0.20);
+    thighLateral = g(0.33, 0.08, 0.12);
     backDamp = g(0.53, 0.10, 0.15);
   }
 
@@ -192,7 +183,6 @@ function laplacianSmooth(
       avgX /= neighbors.length;
       avgZ /= neighbors.length;
       positions[i * 3] += lambda * (avgX - positions[i * 3]);
-      // Y preserved
       positions[i * 3 + 2] += lambda * (avgZ - positions[i * 3 + 2]);
     }
   }
@@ -225,7 +215,7 @@ function computeLegCenters(
   for (let i = 0; i < vertexCount; i++) {
     if (bindings[i]?.segmentId === 'arms') continue;
     const oy = originalPositions[i * 3 + 1];
-    if (oy > 0.36) continue;
+    if (oy > 0.30) continue; // only use below-knee vertices for leg centers
     const ox = originalPositions[i * 3];
     if (ox < axisCX) { lX += ox; lZ += originalPositions[i * 3 + 2]; lN++; }
     else { rX += ox; rZ += originalPositions[i * 3 + 2]; rN++; }
@@ -243,15 +233,13 @@ function computeLegCenters(
 /**
  * Deform the scan mesh based on body fat % change and segment overrides.
  *
- * Uses radial scaling with:
- *   - Gender-aware per-height sensitivity (male=belly, female=hips/bust)
+ * Key design:
+ *   - ALL regions (including arms) use the same continuous sensitivity curve
+ *   - Arms scale from per-arm radial center, blending to body center at shoulders
+ *   - Hips and upper thighs scale from body center (no per-leg split above knee)
+ *   - Per-leg centers only activate below the knee to avoid shelf artifacts
  *   - Gender-aware directional control (belly forward, hips lateral, etc.)
- *   - Per-limb centers (arms scale from arm center, legs from leg center)
- *   - Segment overrides with Gaussian blending and damping
- *   - Light Laplacian smoothing for mesh quality
- *
- * Global slider moves all regions proportionally via sensitivity curves.
- * Segment sliders then adjust incrementally on top of that baseline.
+ *   - Segment overrides adjust incrementally on top of the global baseline
  */
 export function deformMesh(
   positions: Float32Array,
@@ -276,11 +264,6 @@ export function deformMesh(
   const arms = computeArmCenters(originalPositions, bindings, vertexCount, axisCX, axisCZ);
   const legs = computeLegCenters(originalPositions, bindings, vertexCount, axisCX, axisCZ);
 
-  // Pre-compute arm scale
-  const armOvDamped = (overrides.arms + overrides.shoulders * 0.5) * SEGMENT_OVERRIDE_STRENGTH;
-  const armScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE,
-    (1 + deltaBodyFat * ARM_SENSITIVITY / 100) * (1 + armOvDamped / 100)));
-
   // ── Per-vertex deformation ──
   for (let i = 0; i < vertexCount; i++) {
     const binding = bindings[i];
@@ -293,50 +276,46 @@ export function deformMesh(
       continue;
     }
 
-    let cx: number, cz: number, baseScale: number;
+    // Everyone uses the same sensitivity curve — no special arm sensitivity
+    const sens = sensitivity(oy, gender);
+    const ov = blendedSegmentOverride(oy, overrides);
+    const baseScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE,
+      (1 + deltaBodyFat * sens / 100) * (1 + ov / 100)));
+
+    // Determine radial center based on body region
+    let cx: number, cz: number;
 
     if (binding.segmentId === 'arms') {
-      // ── ARM ── scale from per-arm center, blend at shoulder junction
+      // Arms: scale from per-arm center, blend to body center at shoulder junction
       const isLeft = ox < axisCX;
       const armCX = isLeft ? arms.leftCX : arms.rightCX;
       const armCZ = isLeft ? arms.leftCZ : arms.rightCZ;
-      const jb = Math.min(1, Math.max(0, (oy - 0.58) / 0.10));
-      cx = armCX + jb * (axisCX - armCX);
-      cz = armCZ + jb * (axisCZ - armCZ);
-
-      // Blend to torso scale at shoulder junction
-      const tSens = sensitivity(oy, gender);
-      const tOv = blendedSegmentOverride(oy, overrides);
-      const torsoS = Math.max(MIN_SCALE, Math.min(MAX_SCALE,
-        (1 + deltaBodyFat * tSens / 100) * (1 + tOv / 100)));
-      baseScale = armScale + jb * (torsoS - armScale);
+      // Smoothly blend from arm center to body center in the shoulder zone
+      const jb = Math.min(1, Math.max(0, (oy - ARM_JUNCTION_LOW) / (ARM_JUNCTION_HIGH - ARM_JUNCTION_LOW)));
+      const jbs = jb * jb * (3 - 2 * jb); // smoothstep
+      cx = armCX + jbs * (axisCX - armCX);
+      cz = armCZ + jbs * (axisCZ - armCZ);
+    } else if (oy < LEG_SPLIT_LOW) {
+      // Below knee: per-leg center
+      const isLeft = ox < axisCX;
+      cx = isLeft ? legs.leftCX : legs.rightCX;
+      cz = isLeft ? legs.leftCZ : legs.rightCZ;
+    } else if (oy < LEG_SPLIT_HIGH) {
+      // Knee blend zone: smoothly transition from per-leg to body center
+      const t = (oy - LEG_SPLIT_LOW) / (LEG_SPLIT_HIGH - LEG_SPLIT_LOW);
+      const bl = t * t * (3 - 2 * t); // smoothstep
+      const isLeft = ox < axisCX;
+      const legCX = isLeft ? legs.leftCX : legs.rightCX;
+      const legCZ = isLeft ? legs.leftCZ : legs.rightCZ;
+      cx = legCX + bl * (axisCX - legCX);
+      cz = legCZ + bl * (axisCZ - legCZ);
     } else {
-      // ── NON-ARM ── scale from body center or per-leg center
-      const sens = sensitivity(oy, gender);
-      const ov = blendedSegmentOverride(oy, overrides);
-      baseScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE,
-        (1 + deltaBodyFat * sens / 100) * (1 + ov / 100)));
-
-      // Choose scaling center based on height
-      if (oy < LEG_BLEND_LOW) {
-        const isLeft = ox < axisCX;
-        cx = isLeft ? legs.leftCX : legs.rightCX;
-        cz = isLeft ? legs.leftCZ : legs.rightCZ;
-      } else if (oy < LEG_BLEND_HIGH) {
-        const t = (oy - LEG_BLEND_LOW) / (LEG_BLEND_HIGH - LEG_BLEND_LOW);
-        const bl = t * t * (3 - 2 * t); // smoothstep
-        const isLeft = ox < axisCX;
-        const legCX = isLeft ? legs.leftCX : legs.rightCX;
-        const legCZ = isLeft ? legs.leftCZ : legs.rightCZ;
-        cx = legCX + bl * (axisCX - legCX);
-        cz = legCZ + bl * (axisCZ - legCZ);
-      } else {
-        cx = axisCX;
-        cz = axisCZ;
-      }
+      // Everything else (hips, thighs, torso, shoulders): body center
+      cx = axisCX;
+      cz = axisCZ;
     }
 
-    // Compute direction from center
+    // Compute direction from center and apply scale
     const dx = ox - cx;
     const dz = oz - cz;
     const dist = Math.sqrt(dx * dx + dz * dz);
