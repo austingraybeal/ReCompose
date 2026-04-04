@@ -13,12 +13,20 @@ const MAX_SCALE = 1.65;
 const SEGMENT_OVERRIDE_STRENGTH = 0.35;
 
 /**
+ * Arms use a flat sensitivity so they only change volume, never shape.
+ * Using the body Y-curve would give arm vertices at hip height hip-level
+ * sensitivity, distorting the arm along its length.
+ */
+const ARM_FLAT_SENSITIVITY = 0.30;
+
+/**
  * Per-leg center activation zone (normalized Y).
- * Per-leg centers only activate BELOW the knee to avoid hip/thigh shelf.
- * Above this, everything scales from body center axis.
+ * Below LEG_SPLIT_LOW: full per-leg center.
+ * LEG_SPLIT_LOW → LEG_SPLIT_HIGH: smoothstep blend from per-leg to body center.
+ * This extended range ensures thighs separate proportionally when hips widen.
  */
 const LEG_SPLIT_LOW = 0.20;
-const LEG_SPLIT_HIGH = 0.28;
+const LEG_SPLIT_HIGH = 0.40;
 
 /**
  * Arm shoulder junction blend zone.
@@ -56,7 +64,7 @@ function sensitivityFemale(y: number): number {
   return BASE
     + g(0.53, 0.09, 0.82)   // waist/belly — less than male
     + g(0.44, 0.09, 0.90)   // hips — strong, wider sigma
-    + g(0.62, 0.07, 0.62)   // bust
+    + g(0.62, 0.10, 0.72)   // bust — wide sigma for full chest coverage
     + g(0.34, 0.10, 0.75)   // upper thighs — wider to overlap with hips
     + g(0.20, 0.10, 0.22)   // calves
     + g(0.72, 0.08, 0.26);  // upper chest/shoulders
@@ -108,7 +116,7 @@ function directionalScale(y: number, zDir: number, xDir: number, scale: number, 
     backDamp = g(0.53, 0.10, 0.18);
   } else if (gender === 'female') {
     bellyBias = g(0.53, 0.07, 0.25) + g(0.48, 0.06, 0.18);
-    bustBias = g(0.62, 0.05, 0.28);
+    bustBias = g(0.62, 0.08, 0.40);
     thighBias = g(0.34, 0.06, 0.18);
     hipLateral = g(0.44, 0.08, 0.30);
     thighLateral = g(0.33, 0.08, 0.18);
@@ -215,7 +223,7 @@ function computeLegCenters(
   for (let i = 0; i < vertexCount; i++) {
     if (bindings[i]?.segmentId === 'arms') continue;
     const oy = originalPositions[i * 3 + 1];
-    if (oy > 0.30) continue; // only use below-knee vertices for leg centers
+    if (oy > 0.42) continue; // include thigh vertices so leg centers track hip widening
     const ox = originalPositions[i * 3];
     if (ox < axisCX) { lX += ox; lZ += originalPositions[i * 3 + 2]; lN++; }
     else { rX += ox; rZ += originalPositions[i * 3 + 2]; rN++; }
@@ -234,11 +242,10 @@ function computeLegCenters(
  * Deform the scan mesh based on body fat % change and segment overrides.
  *
  * Key design:
- *   - ALL regions (including arms) use the same continuous sensitivity curve
- *   - Arms scale from per-arm radial center, blending to body center at shoulders
- *   - Hips and upper thighs scale from body center (no per-leg split above knee)
- *   - Per-leg centers only activate below the knee to avoid shelf artifacts
- *   - Gender-aware directional control (belly forward, hips lateral, etc.)
+ *   - Arms use flat sensitivity for uniform volume change (no shape distortion)
+ *   - Body regions use continuous gender-aware sensitivity curve
+ *   - Per-leg centers blend through thighs (Y 0.20→0.40) so thighs separate with hips
+ *   - Gender-aware directional control (belly forward, bust forward, hips lateral)
  *   - Segment overrides adjust incrementally on top of the global baseline
  */
 export function deformMesh(
@@ -276,7 +283,33 @@ export function deformMesh(
       continue;
     }
 
-    // Everyone uses the same sensitivity curve — no special arm sensitivity
+    // ── Arms: flat sensitivity, uniform radial scale, no directional bias ──
+    // Arms should only change volume, never shape. Using the body Y-curve
+    // would give arm vertices at hip/waist height those regions' high
+    // sensitivity, stretching the arm non-uniformly along its length.
+    if (binding.segmentId === 'arms') {
+      const armOv = (overrides.arms ?? 0) * SEGMENT_OVERRIDE_STRENGTH;
+      const armScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE,
+        (1 + deltaBodyFat * ARM_FLAT_SENSITIVITY / 100) * (1 + armOv / 100)));
+
+      const isLeft = ox < axisCX;
+      const armCX = isLeft ? arms.leftCX : arms.rightCX;
+      const armCZ = isLeft ? arms.leftCZ : arms.rightCZ;
+      const jb = Math.min(1, Math.max(0, (oy - ARM_JUNCTION_LOW) / (ARM_JUNCTION_HIGH - ARM_JUNCTION_LOW)));
+      const jbs = jb * jb * (3 - 2 * jb);
+      const cx = armCX + jbs * (axisCX - armCX);
+      const cz = armCZ + jbs * (axisCZ - armCZ);
+
+      const dx = ox - cx;
+      const dz = oz - cz;
+      // Uniform radial scale — no directional bias for arms
+      positions[i * 3] = cx + dx * armScale;
+      positions[i * 3 + 1] = oy;
+      positions[i * 3 + 2] = cz + dz * armScale;
+      continue;
+    }
+
+    // ── Body (torso, waist, hips, legs, shoulders) ──
     const sens = sensitivity(oy, gender);
     const ov = blendedSegmentOverride(oy, overrides);
     const baseScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE,
@@ -285,23 +318,15 @@ export function deformMesh(
     // Determine radial center based on body region
     let cx: number, cz: number;
 
-    if (binding.segmentId === 'arms') {
-      // Arms: scale from per-arm center, blend to body center at shoulder junction
-      const isLeft = ox < axisCX;
-      const armCX = isLeft ? arms.leftCX : arms.rightCX;
-      const armCZ = isLeft ? arms.leftCZ : arms.rightCZ;
-      // Smoothly blend from arm center to body center in the shoulder zone
-      const jb = Math.min(1, Math.max(0, (oy - ARM_JUNCTION_LOW) / (ARM_JUNCTION_HIGH - ARM_JUNCTION_LOW)));
-      const jbs = jb * jb * (3 - 2 * jb); // smoothstep
-      cx = armCX + jbs * (axisCX - armCX);
-      cz = armCZ + jbs * (axisCZ - armCZ);
-    } else if (oy < LEG_SPLIT_LOW) {
+    if (oy < LEG_SPLIT_LOW) {
       // Below knee: per-leg center
       const isLeft = ox < axisCX;
       cx = isLeft ? legs.leftCX : legs.rightCX;
       cz = isLeft ? legs.leftCZ : legs.rightCZ;
     } else if (oy < LEG_SPLIT_HIGH) {
-      // Knee blend zone: smoothly transition from per-leg to body center
+      // Leg-to-body blend zone (knee through upper thigh):
+      // smoothly transition from per-leg center to body center.
+      // This ensures thighs separate proportionally when hips widen.
       const t = (oy - LEG_SPLIT_LOW) / (LEG_SPLIT_HIGH - LEG_SPLIT_LOW);
       const bl = t * t * (3 - 2 * t); // smoothstep
       const isLeft = ox < axisCX;
@@ -310,12 +335,12 @@ export function deformMesh(
       cx = legCX + bl * (axisCX - legCX);
       cz = legCZ + bl * (axisCZ - legCZ);
     } else {
-      // Everything else (hips, thighs, torso, shoulders): body center
+      // Hips, torso, shoulders: body center
       cx = axisCX;
       cz = axisCZ;
     }
 
-    // Compute direction from center and apply scale
+    // Compute direction from center and apply directional scale
     const dx = ox - cx;
     const dz = oz - cz;
     const dist = Math.sqrt(dx * dx + dz * dz);
