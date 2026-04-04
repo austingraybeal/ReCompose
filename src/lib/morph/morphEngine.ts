@@ -13,20 +13,30 @@ const MAX_SCALE = 1.65;
 const SEGMENT_OVERRIDE_STRENGTH = 0.35;
 
 /**
- * Arms use a flat sensitivity so they only change volume, never shape.
- * Using the body Y-curve would give arm vertices at hip height hip-level
- * sensitivity, distorting the arm along its length.
+ * Arm sensitivity gradient: upper arm gets fatter (near shoulder),
+ * forearm gets slightly less rounding, wrist/hand minimal.
+ * This is a gentle monotonic gradient — shape is preserved because
+ * the change is smooth, unlike the wild swings of the body Y-curve.
+ *
+ * At Y≈0.50 (upper arm): ~0.42
+ * At Y≈0.35 (elbow):     ~0.32
+ * At Y≈0.25 (forearm):   ~0.26
+ * At Y≈0.12 (wrist):     ~0.19
  */
-const ARM_FLAT_SENSITIVITY = 0.30;
+const ARM_SENS_BASE = 0.18;
+const ARM_SENS_BOOST = 0.27;
+const ARM_Y_LOW = 0.10;   // wrist/hand level
+const ARM_Y_HIGH = 0.56;  // shoulder junction
 
 /**
  * Per-leg center activation zone (normalized Y).
- * Below LEG_SPLIT_LOW: full per-leg center.
+ * Below LEG_SPLIT_LOW: full per-leg center (each calf scales from its own axis).
  * LEG_SPLIT_LOW → LEG_SPLIT_HIGH: smoothstep blend from per-leg to body center.
- * This extended range ensures thighs separate proportionally when hips widen.
+ * Above LEG_SPLIT_HIGH: body center (thighs scale from body center to avoid
+ * inner-thigh pinching that per-leg centers cause).
  */
 const LEG_SPLIT_LOW = 0.20;
-const LEG_SPLIT_HIGH = 0.40;
+const LEG_SPLIT_HIGH = 0.28;
 
 /**
  * Arm shoulder junction blend zone.
@@ -52,8 +62,9 @@ function sensitivityMale(y: number): number {
     + g(0.44, 0.09, 0.58)   // hips — wider sigma for smooth transition
     + g(0.62, 0.07, 0.38)   // chest
     + g(0.34, 0.10, 0.45)   // upper thighs — wider to overlap with hips
-    + g(0.20, 0.10, 0.20)   // calves
-    + g(0.72, 0.08, 0.32);  // upper chest/shoulders
+    + g(0.20, 0.10, 0.30)   // calves — moderate scaling
+    + g(0.72, 0.08, 0.32)   // upper chest/shoulders
+    + g(0.07, 0.05, 0.15);  // ankles
 }
 
 function sensitivityFemale(y: number): number {
@@ -64,10 +75,11 @@ function sensitivityFemale(y: number): number {
   return BASE
     + g(0.53, 0.09, 0.82)   // waist/belly — less than male
     + g(0.44, 0.09, 0.90)   // hips — strong, wider sigma
-    + g(0.62, 0.10, 0.72)   // bust — wide sigma for full chest coverage
+    + g(0.62, 0.11, 0.82)   // bust — wide sigma, strong for female chest
     + g(0.34, 0.10, 0.75)   // upper thighs — wider to overlap with hips
-    + g(0.20, 0.10, 0.22)   // calves
-    + g(0.72, 0.08, 0.26);  // upper chest/shoulders
+    + g(0.20, 0.10, 0.42)   // calves — substantial scaling
+    + g(0.72, 0.08, 0.26)   // upper chest/shoulders
+    + g(0.07, 0.05, 0.22);  // ankles — cankles at high BF%
 }
 
 function sensitivityNeutral(y: number): number {
@@ -80,8 +92,9 @@ function sensitivityNeutral(y: number): number {
     + g(0.44, 0.09, 0.72)   // hips — wider sigma
     + g(0.62, 0.07, 0.50)   // bust/chest
     + g(0.34, 0.10, 0.58)   // upper thighs — wider to overlap
-    + g(0.20, 0.10, 0.22)   // calves
-    + g(0.72, 0.08, 0.30);  // upper chest/shoulders
+    + g(0.20, 0.10, 0.28)   // calves
+    + g(0.72, 0.08, 0.30)   // upper chest/shoulders
+    + g(0.07, 0.05, 0.18);  // ankles
 }
 
 function sensitivity(y: number, gender: BodyGender): number {
@@ -223,7 +236,7 @@ function computeLegCenters(
   for (let i = 0; i < vertexCount; i++) {
     if (bindings[i]?.segmentId === 'arms') continue;
     const oy = originalPositions[i * 3 + 1];
-    if (oy > 0.42) continue; // include thigh vertices so leg centers track hip widening
+    if (oy > 0.30) continue; // only below-knee vertices for stable leg centers
     const ox = originalPositions[i * 3];
     if (ox < axisCX) { lX += ox; lZ += originalPositions[i * 3 + 2]; lN++; }
     else { rX += ox; rZ += originalPositions[i * 3 + 2]; rN++; }
@@ -242,9 +255,9 @@ function computeLegCenters(
  * Deform the scan mesh based on body fat % change and segment overrides.
  *
  * Key design:
- *   - Arms use flat sensitivity for uniform volume change (no shape distortion)
+ *   - Arms use gentle gradient sensitivity (upper arm fatter, forearm less)
  *   - Body regions use continuous gender-aware sensitivity curve
- *   - Per-leg centers blend through thighs (Y 0.20→0.40) so thighs separate with hips
+ *   - Per-leg centers below knee (Y<0.28), body center above (thighs, hips)
  *   - Gender-aware directional control (belly forward, bust forward, hips lateral)
  *   - Segment overrides adjust incrementally on top of the global baseline
  */
@@ -288,9 +301,12 @@ export function deformMesh(
     // would give arm vertices at hip/waist height those regions' high
     // sensitivity, stretching the arm non-uniformly along its length.
     if (binding.segmentId === 'arms') {
+      // Gentle gradient: upper arm fatter, forearm less, wrist minimal
+      const armT = Math.min(1, Math.max(0, (oy - ARM_Y_LOW) / (ARM_Y_HIGH - ARM_Y_LOW)));
+      const armSens = ARM_SENS_BASE + ARM_SENS_BOOST * armT;
       const armOv = (overrides.arms ?? 0) * SEGMENT_OVERRIDE_STRENGTH;
       const armScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE,
-        (1 + deltaBodyFat * ARM_FLAT_SENSITIVITY / 100) * (1 + armOv / 100)));
+        (1 + deltaBodyFat * armSens / 100) * (1 + armOv / 100)));
 
       const isLeft = ox < axisCX;
       const armCX = isLeft ? arms.leftCX : arms.rightCX;
@@ -324,9 +340,7 @@ export function deformMesh(
       cx = isLeft ? legs.leftCX : legs.rightCX;
       cz = isLeft ? legs.leftCZ : legs.rightCZ;
     } else if (oy < LEG_SPLIT_HIGH) {
-      // Leg-to-body blend zone (knee through upper thigh):
-      // smoothly transition from per-leg center to body center.
-      // This ensures thighs separate proportionally when hips widen.
+      // Knee blend zone: smoothly transition from per-leg to body center.
       const t = (oy - LEG_SPLIT_LOW) / (LEG_SPLIT_HIGH - LEG_SPLIT_LOW);
       const bl = t * t * (3 - 2 * t); // smoothstep
       const isLeft = ox < axisCX;
