@@ -103,6 +103,14 @@ function checkTransitionZone(
  * @param armThreshold  X-distance threshold for arm classification (mm).
  * @param armRefs       Per-side elbow/wrist/armpit reference Y-heights (mm).
  */
+/** Ring names that belong to arms rather than the torso/legs. */
+const ARM_RING_NAMES: ReadonlySet<string> = new Set([
+  'ElbowLeftArm',
+  'ElbowRightArm',
+  'WristLeftArm',
+  'WristRightArm',
+]);
+
 export function classifyVertices(
   positions: Float32Array,
   rings: LandmarkRing[],
@@ -119,6 +127,19 @@ export function classifyVertices(
 
   const ankleRing = rings.find((r) => r.name.includes('Ankle'));
   const ankleHeight = ankleRing ? ankleRing.height : 80;
+
+  // Non-arm vertices must not bind to elbow/wrist rings — those rings have
+  // very low sensitivity and would otherwise create visible "dead bands" at
+  // the elbow/wrist Y on the torso. Build a filtered ring list and map each
+  // index back to the global rings array.
+  const nonArmRings: LandmarkRing[] = [];
+  const nonArmToGlobal: number[] = [];
+  for (let i = 0; i < rings.length; i++) {
+    if (!ARM_RING_NAMES.has(rings[i].name)) {
+      nonArmRings.push(rings[i]);
+      nonArmToGlobal.push(i);
+    }
+  }
 
   // Body height range for normalizing Y to 0-1.
   let minY = Infinity;
@@ -182,9 +203,7 @@ export function classifyVertices(
     const y = positions[i * 3 + 1];
     const z = positions[i * 3 + 2];
 
-    const { aboveIdx, belowIdx, weight } = findBoundingRings(y, rings);
     const ny = normalizeY(y);
-
     const armSide = armSideOf[i];
     let segmentId: SegmentId;
     let armSideLabel: 'left' | 'right' | undefined;
@@ -195,6 +214,29 @@ export function classifyVertices(
       armSideLabel = armSide === 1 ? 'left' : 'right';
     } else {
       segmentId = getSegmentForHeight(ny);
+    }
+
+    // Arm vertices bind against the full (arm-inclusive) ring list; non-arm
+    // vertices bind against the arm-filtered list so they don't get their
+    // sensitivity dragged to 0 by a nearby elbow/wrist ring.
+    let aboveIdx: number;
+    let belowIdx: number;
+    let weight: number;
+    if (armSide !== 0) {
+      const r = findBoundingRings(y, rings);
+      aboveIdx = r.aboveIdx;
+      belowIdx = r.belowIdx;
+      weight = r.weight;
+    } else if (nonArmRings.length > 0) {
+      const r = findBoundingRings(y, nonArmRings);
+      aboveIdx = nonArmToGlobal[r.aboveIdx];
+      belowIdx = nonArmToGlobal[r.belowIdx];
+      weight = r.weight;
+    } else {
+      const r = findBoundingRings(y, rings);
+      aboveIdx = r.aboveIdx;
+      belowIdx = r.belowIdx;
+      weight = r.weight;
     }
 
     const ringCenter =
