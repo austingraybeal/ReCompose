@@ -78,24 +78,49 @@ function directionalScale(
 }
 
 // ════════════════════════════════════════════════════════════════
-// Ring-interpolated radial sensitivity
+// Gaussian-weighted ring sensitivity
 //
 // Source of truth: sex-specific ring table in sensitivityModel.ts. The same
 // table drives metric projection, so mesh circumference growth and the
-// metrics panel always agree.
+// metrics panel agree. Each ring contributes via a Gaussian kernel centered
+// on its actual scan Y so the radial expansion varies smoothly with height,
+// with no band/cliff artifacts at ring boundaries.
 // ════════════════════════════════════════════════════════════════
 
-function ringInterpolatedSensitivity(
-  binding: VertexBinding,
-  rings: LandmarkRing[],
+/**
+ * Gaussian sigma for ring sensitivity averaging, in the same unit-height
+ * normalized space as ring.height / vertex Y. Body height = 1.0, so 0.04
+ * ≈ 70mm on a 1750mm person. Tune lower for sharper waist emphasis, higher
+ * for smoother transitions.
+ */
+const RING_KERNEL_SIGMA = 0.04;
+const RING_KERNEL_MIN_WEIGHT = 0.001;
+
+/** Ring names that are arm-only and must be excluded from torso/leg sampling. */
+const ARM_RING_NAMES: ReadonlySet<string> = new Set([
+  'ElbowLeftArm',
+  'ElbowRightArm',
+  'WristLeftArm',
+  'WristRightArm',
+]);
+
+function gaussianRingSensitivity(
+  y: number,
+  rings: readonly LandmarkRing[],
   sex: Sex,
 ): number {
-  if (rings.length === 0) return 0;
-  const above = rings[binding.ringAboveIdx];
-  const below = rings[binding.ringBelowIdx];
-  const sAbove = above ? getRingSensitivity(above.name, sex) : 0;
-  const sBelow = below ? getRingSensitivity(below.name, sex) : 0;
-  return sBelow * (1 - binding.ringWeight) + sAbove * binding.ringWeight;
+  const twoSigmaSq = 2 * RING_KERNEL_SIGMA * RING_KERNEL_SIGMA;
+  let sum = 0;
+  let weightSum = 0;
+  for (const ring of rings) {
+    if (ARM_RING_NAMES.has(ring.name)) continue;
+    const d = y - ring.height;
+    const w = Math.exp(-(d * d) / twoSigmaSq);
+    if (w < RING_KERNEL_MIN_WEIGHT) continue;
+    sum += getRingSensitivity(ring.name, sex) * w;
+    weightSum += w;
+  }
+  return weightSum > 0 ? sum / weightSum : 0;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -301,7 +326,7 @@ export function deformMesh(
     let sens: number;
     if (binding.segmentId === 'upper_arms') sens = upperArmSens;
     else if (binding.segmentId === 'forearms') sens = forearmSens;
-    else sens = ringInterpolatedSensitivity(binding, rings, sex);
+    else sens = gaussianRingSensitivity(oy, rings, sex);
 
     const ov = blendedSegmentOverride(oy, overrides, armSegment);
     const baseScale = Math.max(
