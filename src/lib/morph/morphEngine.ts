@@ -13,9 +13,17 @@ const MAX_SCALE = 1.65;
 /** Segment-override damping: +25 slider → ~8.75% scale change. */
 const SEGMENT_OVERRIDE_STRENGTH = 0.35;
 
-/** Per-leg center activation zone (normalized Y) — active BELOW the knee only. */
-const LEG_SPLIT_LOW = 0.20;
-const LEG_SPLIT_HIGH = 0.28;
+/**
+ * Per-leg center activation zone (normalized Y).
+ * Below LEG_SPLIT_LOW: 100% per-leg center.
+ * Above LEG_SPLIT_HIGH: 100% body center.
+ * Between: smoothstep blend — covers the thigh so thighs scale around their
+ * own leg mass (inner surface fills the midline gap, outer surface flares),
+ * not around the body axis (which pushes inner surfaces apart on growth and
+ * collapses them on shrink).
+ */
+const LEG_SPLIT_LOW = 0.22;
+const LEG_SPLIT_HIGH = 0.40;
 
 /** Arm → shoulder-junction radial-center blend zone (normalized Y). */
 const ARM_JUNCTION_LOW = 0.56;
@@ -250,7 +258,9 @@ function computeLegCenters(
   for (let i = 0; i < vertexCount; i++) {
     if (isArmSegment(bindings[i]?.segmentId)) continue;
     const oy = originalPositions[i * 3 + 1];
-    if (oy > 0.30) continue; // only use below-knee vertices for leg centers
+    // Include the full leg (calves + thighs) so the per-leg center reflects
+    // the full leg mass, matching the extended LEG_SPLIT blend region.
+    if (oy > 0.40) continue;
     const ox = originalPositions[i * 3];
     if (ox < axisCX) {
       lX += ox;
