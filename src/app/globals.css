@@ -39,13 +39,19 @@
   --rc-delta-negative: #5db8d0;
   --rc-delta-neutral: #808498;
 
-  /* Segment highlight colors */
+  /* Segment highlight colors (8-segment) */
   --rc-seg-shoulders: #4ac8e8;
-  --rc-seg-arms: #5de8d0;
+  --rc-seg-upper-arms: #5de8d0;
+  --rc-seg-forearms: #7af0e0;
   --rc-seg-torso: #4acfa0;
   --rc-seg-waist: #5db8d0;
   --rc-seg-hips: #7aa0e0;
-  --rc-seg-legs: #a78bfa;
+  --rc-seg-thighs: #a78bfa;
+  --rc-seg-calves: #c4a7ff;
+
+  /* Legacy aliases (6-segment) — kept for backward compat */
+  --rc-seg-arms: var(--rc-seg-upper-arms);
+  --rc-seg-legs: var(--rc-seg-thighs);
 
   /* Shadows */
   --rc-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.3);

@@ -1,6 +1,7 @@
-import type { LandmarkRing, VertexBinding, SegmentOverrides } from '@/types/scan';
+import type { LandmarkRing, VertexBinding, SegmentOverrides, SegmentId } from '@/types/scan';
 import type { BodyGender } from '@/lib/stores/genderStore';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
+import { getArmSensitivity, type Sex } from './sensitivityModel';
 
 // ════════════════════════════════════════════════════════════════
 // Constants
@@ -9,86 +10,88 @@ import { SEGMENTS } from '@/lib/constants/segmentDefs';
 const MIN_SCALE = 0.82;
 const MAX_SCALE = 1.65;
 
-/** Segment overrides are damped: +25 slider → ~8.75% change */
+/** Segment-override damping: +25 slider → ~8.75% scale change. */
 const SEGMENT_OVERRIDE_STRENGTH = 0.35;
 
-/**
- * Per-leg center activation zone (normalized Y).
- * Per-leg centers only activate BELOW the knee to avoid hip/thigh shelf.
- * Above this, everything scales from body center axis.
- */
+/** Per-leg center activation zone (normalized Y) — active BELOW the knee only. */
 const LEG_SPLIT_LOW = 0.20;
 const LEG_SPLIT_HIGH = 0.28;
 
-/**
- * Arm shoulder junction blend zone.
- * Arms blend their radial center from arm-center to body-center here.
- */
+/** Arm → shoulder-junction radial-center blend zone (normalized Y). */
 const ARM_JUNCTION_LOW = 0.56;
 const ARM_JUNCTION_HIGH = 0.70;
 
 // ════════════════════════════════════════════════════════════════
-// Gender-aware sensitivity — how much each body height changes per 1% BF
-//
-// EVERY region uses this — arms, legs, torso, everything.
-// The curve is continuous so there are no shelf artifacts.
+// Gender-aware Y-based sensitivity curves (global BF response)
 // ════════════════════════════════════════════════════════════════
 
 function sensitivityMale(y: number): number {
   const BASE = 0.22;
   const g = (c: number, s: number, p: number) =>
     p * Math.exp(-((y - c) ** 2) / (2 * s * s));
-
-  return BASE
-    + g(0.53, 0.09, 1.10)   // waist/belly — strong (android)
-    + g(0.44, 0.09, 0.58)   // hips — wider sigma for smooth transition
-    + g(0.62, 0.07, 0.38)   // chest
-    + g(0.34, 0.10, 0.45)   // upper thighs — wider to overlap with hips
-    + g(0.20, 0.10, 0.20)   // calves
-    + g(0.72, 0.08, 0.32);  // upper chest/shoulders
+  return (
+    BASE +
+    g(0.53, 0.09, 1.10) + // waist/belly — android
+    g(0.44, 0.09, 0.58) + // hips
+    g(0.62, 0.07, 0.38) + // chest
+    g(0.34, 0.10, 0.45) + // upper thighs
+    g(0.20, 0.10, 0.20) + // calves
+    g(0.72, 0.08, 0.32)   // upper chest/shoulders
+  );
 }
 
 function sensitivityFemale(y: number): number {
   const BASE = 0.22;
   const g = (c: number, s: number, p: number) =>
     p * Math.exp(-((y - c) ** 2) / (2 * s * s));
-
-  return BASE
-    + g(0.53, 0.09, 0.82)   // waist/belly — less than male
-    + g(0.44, 0.09, 0.90)   // hips — strong, wider sigma
-    + g(0.62, 0.07, 0.62)   // bust
-    + g(0.34, 0.10, 0.75)   // upper thighs — wider to overlap with hips
-    + g(0.20, 0.10, 0.22)   // calves
-    + g(0.72, 0.08, 0.26);  // upper chest/shoulders
+  return (
+    BASE +
+    g(0.53, 0.09, 0.82) + // waist/belly — less than male
+    g(0.44, 0.09, 0.90) + // hips — strong, gynoid
+    g(0.62, 0.07, 0.62) + // bust
+    g(0.34, 0.10, 0.75) + // upper thighs
+    g(0.20, 0.10, 0.22) + // calves
+    g(0.72, 0.08, 0.26)   // upper chest/shoulders
+  );
 }
 
 function sensitivityNeutral(y: number): number {
   const BASE = 0.22;
   const g = (c: number, s: number, p: number) =>
     p * Math.exp(-((y - c) ** 2) / (2 * s * s));
-
-  return BASE
-    + g(0.53, 0.09, 1.00)   // waist/belly
-    + g(0.44, 0.09, 0.72)   // hips — wider sigma
-    + g(0.62, 0.07, 0.50)   // bust/chest
-    + g(0.34, 0.10, 0.58)   // upper thighs — wider to overlap
-    + g(0.20, 0.10, 0.22)   // calves
-    + g(0.72, 0.08, 0.30);  // upper chest/shoulders
+  return (
+    BASE +
+    g(0.53, 0.09, 1.00) +
+    g(0.44, 0.09, 0.72) +
+    g(0.62, 0.07, 0.50) +
+    g(0.34, 0.10, 0.58) +
+    g(0.20, 0.10, 0.22) +
+    g(0.72, 0.08, 0.30)
+  );
 }
 
 function sensitivity(y: number, gender: BodyGender): number {
   switch (gender) {
-    case 'male': return sensitivityMale(y);
-    case 'female': return sensitivityFemale(y);
-    default: return sensitivityNeutral(y);
+    case 'male':
+      return sensitivityMale(y);
+    case 'female':
+      return sensitivityFemale(y);
+    default:
+      return sensitivityNeutral(y);
   }
 }
 
 // ════════════════════════════════════════════════════════════════
-// Gender-aware directional control — front/back/lateral scaling
+// Gender-aware directional (front/back/lateral) control
 // ════════════════════════════════════════════════════════════════
 
-function directionalScale(y: number, zDir: number, xDir: number, scale: number, gender: BodyGender): number {
+function directionalScale(
+  y: number,
+  zDir: number,
+  xDir: number,
+  scale: number,
+  gender: BodyGender,
+): number {
   const delta = scale - 1;
   if (Math.abs(delta) < 0.005) return scale;
 
@@ -126,27 +129,32 @@ function directionalScale(y: number, zDir: number, xDir: number, scale: number, 
   const lateralBias = hipLateral + thighLateral;
 
   let mult = 1.0;
-
-  if (zDir > 0) {
-    mult += frontBias * zDir;
-  } else {
-    mult += backDamp * zDir;
-  }
-
+  if (zDir > 0) mult += frontBias * zDir;
+  else mult += backDamp * zDir;
   mult += lateralBias * xDir;
 
   return 1.0 + delta * mult;
 }
 
 // ════════════════════════════════════════════════════════════════
-// Segment override blending
+// Segment-override Gaussian blending
 // ════════════════════════════════════════════════════════════════
 
-function blendedSegmentOverride(y: number, overrides: SegmentOverrides): number {
+/**
+ * Blend segment-override values by Gaussian Y-distance.
+ * Lateral segments (arms) and non-lateral segments are blended against their
+ * own vertex population so an arm override only affects arm vertices and a
+ * torso override only affects torso vertices.
+ */
+function blendedSegmentOverride(
+  y: number,
+  overrides: SegmentOverrides,
+  isArm: boolean,
+): number {
   let totalWeight = 0;
   let blendedValue = 0;
   for (const seg of SEGMENTS) {
-    if (seg.isLateral) continue;
+    if (Boolean(seg.isLateral) !== isArm) continue;
     const dist = y - seg.yCenter;
     const w = Math.exp(-(dist * dist) / (2 * seg.sigma * seg.sigma));
     if (w > 0.001) {
@@ -165,7 +173,7 @@ function laplacianSmooth(
   positions: Float32Array,
   adjacency: Uint32Array[],
   iterations: number,
-  lambda: number
+  lambda: number,
 ): void {
   const vertexCount = positions.length / 3;
   const temp = new Float32Array(positions.length);
@@ -175,7 +183,8 @@ function laplacianSmooth(
     for (let i = 0; i < vertexCount; i++) {
       const neighbors = adjacency[i];
       if (!neighbors || neighbors.length === 0) continue;
-      let avgX = 0, avgZ = 0;
+      let avgX = 0;
+      let avgZ = 0;
       for (let j = 0; j < neighbors.length; j++) {
         avgX += temp[neighbors[j] * 3];
         avgZ += temp[neighbors[j] * 3 + 2];
@@ -189,40 +198,70 @@ function laplacianSmooth(
 }
 
 // ════════════════════════════════════════════════════════════════
-// Center computation helpers
+// Per-side center computation helpers
 // ════════════════════════════════════════════════════════════════
 
+function isArmSegment(id: SegmentId | undefined): boolean {
+  return id === 'upper_arms' || id === 'forearms';
+}
+
 function computeArmCenters(
-  originalPositions: Float32Array, bindings: VertexBinding[], vertexCount: number, axisCX: number, axisCZ: number
+  originalPositions: Float32Array,
+  bindings: VertexBinding[],
+  vertexCount: number,
+  axisCX: number,
+  axisCZ: number,
 ) {
   let lX = 0, lZ = 0, lN = 0, rX = 0, rZ = 0, rN = 0;
   for (let i = 0; i < vertexCount; i++) {
-    if (bindings[i]?.segmentId !== 'arms') continue;
+    if (!isArmSegment(bindings[i]?.segmentId)) continue;
     const ox = originalPositions[i * 3];
-    if (ox < axisCX) { lX += ox; lZ += originalPositions[i * 3 + 2]; lN++; }
-    else { rX += ox; rZ += originalPositions[i * 3 + 2]; rN++; }
+    if (ox < axisCX) {
+      lX += ox;
+      lZ += originalPositions[i * 3 + 2];
+      lN++;
+    } else {
+      rX += ox;
+      rZ += originalPositions[i * 3 + 2];
+      rN++;
+    }
   }
   return {
-    leftCX: lN > 0 ? lX / lN : axisCX - 0.12, leftCZ: lN > 0 ? lZ / lN : axisCZ,
-    rightCX: rN > 0 ? rX / rN : axisCX + 0.12, rightCZ: rN > 0 ? rZ / rN : axisCZ,
+    leftCX: lN > 0 ? lX / lN : axisCX - 0.12,
+    leftCZ: lN > 0 ? lZ / lN : axisCZ,
+    rightCX: rN > 0 ? rX / rN : axisCX + 0.12,
+    rightCZ: rN > 0 ? rZ / rN : axisCZ,
   };
 }
 
 function computeLegCenters(
-  originalPositions: Float32Array, bindings: VertexBinding[], vertexCount: number, axisCX: number, axisCZ: number
+  originalPositions: Float32Array,
+  bindings: VertexBinding[],
+  vertexCount: number,
+  axisCX: number,
+  axisCZ: number,
 ) {
   let lX = 0, lZ = 0, lN = 0, rX = 0, rZ = 0, rN = 0;
   for (let i = 0; i < vertexCount; i++) {
-    if (bindings[i]?.segmentId === 'arms') continue;
+    if (isArmSegment(bindings[i]?.segmentId)) continue;
     const oy = originalPositions[i * 3 + 1];
     if (oy > 0.30) continue; // only use below-knee vertices for leg centers
     const ox = originalPositions[i * 3];
-    if (ox < axisCX) { lX += ox; lZ += originalPositions[i * 3 + 2]; lN++; }
-    else { rX += ox; rZ += originalPositions[i * 3 + 2]; rN++; }
+    if (ox < axisCX) {
+      lX += ox;
+      lZ += originalPositions[i * 3 + 2];
+      lN++;
+    } else {
+      rX += ox;
+      rZ += originalPositions[i * 3 + 2];
+      rN++;
+    }
   }
   return {
-    leftCX: lN > 0 ? lX / lN : axisCX - 0.06, leftCZ: lN > 0 ? lZ / lN : axisCZ,
-    rightCX: rN > 0 ? rX / rN : axisCX + 0.06, rightCZ: rN > 0 ? rZ / rN : axisCZ,
+    leftCX: lN > 0 ? lX / lN : axisCX - 0.06,
+    leftCZ: lN > 0 ? lZ / lN : axisCZ,
+    rightCX: rN > 0 ? rX / rN : axisCX + 0.06,
+    rightCZ: rN > 0 ? rZ / rN : axisCZ,
   };
 }
 
@@ -234,10 +273,13 @@ function computeLegCenters(
  * Deform the scan mesh based on body fat % change and segment overrides.
  *
  * Key design:
- *   - ALL regions (including arms) use the same continuous sensitivity curve
- *   - Arms scale from per-arm radial center, blending to body center at shoulders
+ *   - Non-arm vertices use a gender-continuous Y-based sensitivity curve
+ *   - Arm vertices (upper_arms / forearms) use sex-specific sub-segment
+ *     sensitivity from {@link getArmSensitivity}
+ *   - Arms scale from per-arm radial centers, blending to body center at the
+ *     shoulder junction
  *   - Hips and upper thighs scale from body center (no per-leg split above knee)
- *   - Per-leg centers only activate below the knee to avoid shelf artifacts
+ *   - Per-leg centers activate only below the knee
  *   - Gender-aware directional control (belly forward, hips lateral, etc.)
  *   - Segment overrides adjust incrementally on top of the global baseline
  */
@@ -249,20 +291,29 @@ export function deformMesh(
   deltaBodyFat: number,
   overrides: SegmentOverrides,
   adjacency?: Uint32Array[],
-  gender: BodyGender = 'neutral'
+  gender: BodyGender = 'neutral',
 ): void {
   const vertexCount = originalPositions.length / 3;
+  const sex: Sex = gender;
 
   // Body center axis
-  let axisCX = 0, axisCZ = 0;
+  let axisCX = 0;
+  let axisCZ = 0;
   if (rings.length > 0) {
-    for (const ring of rings) { axisCX += ring.center.x; axisCZ += ring.center.z; }
+    for (const ring of rings) {
+      axisCX += ring.center.x;
+      axisCZ += ring.center.z;
+    }
     axisCX /= rings.length;
     axisCZ /= rings.length;
   }
 
   const arms = computeArmCenters(originalPositions, bindings, vertexCount, axisCX, axisCZ);
   const legs = computeLegCenters(originalPositions, bindings, vertexCount, axisCX, axisCZ);
+
+  // Pre-compute sex-specific arm sub-segment global BF response
+  const upperArmSens = getArmSensitivity('upper_arm', sex);
+  const forearmSens = getArmSensitivity('forearm', sex);
 
   // ── Per-vertex deformation ──
   for (let i = 0; i < vertexCount; i++) {
@@ -272,36 +323,46 @@ export function deformMesh(
     const oz = originalPositions[i * 3 + 2];
 
     if (!binding) {
-      positions[i * 3] = ox; positions[i * 3 + 1] = oy; positions[i * 3 + 2] = oz;
+      positions[i * 3] = ox;
+      positions[i * 3 + 1] = oy;
+      positions[i * 3 + 2] = oz;
       continue;
     }
 
-    // Everyone uses the same sensitivity curve — no special arm sensitivity
-    const sens = sensitivity(oy, gender);
-    const ov = blendedSegmentOverride(oy, overrides);
-    const baseScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE,
-      (1 + deltaBodyFat * sens / 100) * (1 + ov / 100)));
+    const armSegment = isArmSegment(binding.segmentId);
 
-    // Determine radial center based on body region
-    let cx: number, cz: number;
+    // Global BF response
+    let sens: number;
+    if (binding.segmentId === 'upper_arms') sens = upperArmSens;
+    else if (binding.segmentId === 'forearms') sens = forearmSens;
+    else sens = sensitivity(oy, gender);
 
-    if (binding.segmentId === 'arms') {
-      // Arms: scale from per-arm center, blend to body center at shoulder junction
+    const ov = blendedSegmentOverride(oy, overrides, armSegment);
+    const baseScale = Math.max(
+      MIN_SCALE,
+      Math.min(MAX_SCALE, (1 + (deltaBodyFat * sens) / 100) * (1 + ov / 100)),
+    );
+
+    // Determine radial center.
+    let cx: number;
+    let cz: number;
+
+    if (armSegment) {
       const isLeft = ox < axisCX;
       const armCX = isLeft ? arms.leftCX : arms.rightCX;
       const armCZ = isLeft ? arms.leftCZ : arms.rightCZ;
-      // Smoothly blend from arm center to body center in the shoulder zone
-      const jb = Math.min(1, Math.max(0, (oy - ARM_JUNCTION_LOW) / (ARM_JUNCTION_HIGH - ARM_JUNCTION_LOW)));
+      const jb = Math.min(
+        1,
+        Math.max(0, (oy - ARM_JUNCTION_LOW) / (ARM_JUNCTION_HIGH - ARM_JUNCTION_LOW)),
+      );
       const jbs = jb * jb * (3 - 2 * jb); // smoothstep
       cx = armCX + jbs * (axisCX - armCX);
       cz = armCZ + jbs * (axisCZ - armCZ);
     } else if (oy < LEG_SPLIT_LOW) {
-      // Below knee: per-leg center
       const isLeft = ox < axisCX;
       cx = isLeft ? legs.leftCX : legs.rightCX;
       cz = isLeft ? legs.leftCZ : legs.rightCZ;
     } else if (oy < LEG_SPLIT_HIGH) {
-      // Knee blend zone: smoothly transition from per-leg to body center
       const t = (oy - LEG_SPLIT_LOW) / (LEG_SPLIT_HIGH - LEG_SPLIT_LOW);
       const bl = t * t * (3 - 2 * t); // smoothstep
       const isLeft = ox < axisCX;
@@ -310,12 +371,11 @@ export function deformMesh(
       cx = legCX + bl * (axisCX - legCX);
       cz = legCZ + bl * (axisCZ - legCZ);
     } else {
-      // Everything else (hips, thighs, torso, shoulders): body center
       cx = axisCX;
       cz = axisCZ;
     }
 
-    // Compute direction from center and apply scale
+    // Compute direction from center and apply scale.
     const dx = ox - cx;
     const dz = oz - cz;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -330,14 +390,18 @@ export function deformMesh(
       positions[i * 3 + 1] = oy; // preserve Y
       positions[i * 3 + 2] = cz + dz * finalScale;
     } else {
-      positions[i * 3] = ox; positions[i * 3 + 1] = oy; positions[i * 3 + 2] = oz;
+      positions[i * 3] = ox;
+      positions[i * 3 + 1] = oy;
+      positions[i * 3 + 2] = oz;
     }
   }
 
   // ── Laplacian smoothing ── light pass to prevent sharp edges
   if (adjacency && adjacency.length === vertexCount) {
-    const mag = Math.abs(deltaBodyFat) +
-      Object.values(overrides).reduce((s, v) => s + Math.abs(v), 0) / 6;
+    const overrideCount = Object.keys(overrides).length || 1;
+    const overrideAvg =
+      Object.values(overrides).reduce((s, v) => s + Math.abs(v), 0) / overrideCount;
+    const mag = Math.abs(deltaBodyFat) + overrideAvg;
     const iters = mag > 20 ? 3 : 2;
     laplacianSmooth(positions, adjacency, iters, 0.30);
   }

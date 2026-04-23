@@ -1,19 +1,16 @@
-import type { BodyComposition, SegmentOverrides, ProjectedMetrics, LandmarkRing } from '@/types/scan';
-import { RING_SENSITIVITY } from './sensitivityModel';
+import type {
+  BodyComposition,
+  SegmentOverrides,
+  ProjectedMetrics,
+  LandmarkRing,
+} from '@/types/scan';
+import { getRingSensitivity, type Sex } from './sensitivityModel';
 
 /**
  * Project body metrics at a given body fat percentage.
  *
- * Estimates what weight, BMI, waist circumference, hip circumference,
- * and waist-to-hip ratio would be based on the current slider positions.
- *
- * @param bodyComp - Original body composition data from the scan
- * @param originalBF - Original body fat percentage
- * @param currentBF - Current global slider value
- * @param overrides - Per-segment override values
- * @param rings - Landmark rings for circumference lookup
- * @param measures - Original measurements (circumferences)
- * @returns Projected metrics
+ * Estimates projected weight, BMI, waist & hip circumference, and WHR based
+ * on the current slider positions.
  */
 export function projectMetrics(
   bodyComp: BodyComposition,
@@ -21,55 +18,57 @@ export function projectMetrics(
   currentBF: number,
   overrides: SegmentOverrides,
   rings: LandmarkRing[],
-  measures: Record<string, number>
+  measures: Record<string, number>,
+  sex: Sex = 'neutral',
 ): ProjectedMetrics {
   const deltaBF = currentBF - originalBF;
 
-  // Weight projection — fat mass changes proportionally to BF% delta.
-  // A 32% BF increase (23→55%) on a 235lb person should add ~75-100 lbs.
-  // Formula: new weight = originalWeight * (1 - originalBF/100 + currentBF/100) / (1)
-  // This assumes lean mass stays constant and only fat mass changes.
+  // Fat-mass-only weight model: lean mass held constant, fat fraction updated.
   const originalFatFraction = originalBF / 100;
   const leanMass = bodyComp.weight * (1 - originalFatFraction);
   const newFatFraction = currentBF / 100;
-  // New total weight = leanMass / (1 - newFatFraction), clamped to avoid division issues
   const clampedNewFatFraction = Math.min(newFatFraction, 0.65);
   const baseWeight = leanMass / (1 - clampedNewFatFraction);
 
-  // Regional overrides add additional weight shifts
+  // Regional overrides add additional weight shifts.
+  // Arms and legs are split; their combined weights equal the legacy 6-segment model.
   const regionalWeightDelta =
-    (overrides.waist * 0.004 +
-     overrides.hips * 0.003 +
-     overrides.torso * 0.003 +
-     overrides.legs * 0.002 +
-     overrides.shoulders * 0.001 +
-     overrides.arms * 0.001) * bodyComp.weight / 100;
+    ((overrides.waist * 0.004 +
+      overrides.hips * 0.003 +
+      overrides.torso * 0.003 +
+      overrides.thighs * 0.0015 +
+      overrides.calves * 0.0005 +
+      overrides.shoulders * 0.001 +
+      overrides.upper_arms * 0.0007 +
+      overrides.forearms * 0.0003) *
+      bodyComp.weight) /
+    100;
   const estimatedWeight = Math.max(0, baseWeight + regionalWeightDelta);
 
-  // Height in meters (estimate from scan or body comp)
-  const heightM = bodyComp.weight > 0 && bodyComp.bmi > 0
-    ? Math.sqrt(bodyComp.weight / bodyComp.bmi)
-    : 1.7; // fallback
+  // Height in meters (estimated from scan/body-comp).
+  const heightM =
+    bodyComp.weight > 0 && bodyComp.bmi > 0
+      ? Math.sqrt(bodyComp.weight / bodyComp.bmi)
+      : 1.7;
 
-  const estimatedBMI = heightM > 0
-    ? estimatedWeight / (heightM * heightM)
-    : bodyComp.bmi;
+  const estimatedBMI = heightM > 0 ? estimatedWeight / (heightM * heightM) : bodyComp.bmi;
 
   // Waist circumference projection
-  const waistSensitivity = RING_SENSITIVITY['Waist'] ?? 1.5;
-  const waistGlobalScale = 1 + (deltaBF * waistSensitivity / 100);
-  const waistRegionalScale = 1 + (overrides.waist / 100);
-  const originalWaist = measures['WaistCircumference'] ?? measures['Waist'] ?? bodyComp['Waist'] ?? 80;
+  const waistSensitivity = getRingSensitivity('Waist', sex);
+  const waistGlobalScale = 1 + (deltaBF * waistSensitivity) / 100;
+  const waistRegionalScale = 1 + overrides.waist / 100;
+  const originalWaist =
+    measures['WaistCircumference'] ?? measures['Waist'] ?? bodyComp['Waist'] ?? 80;
   const estimatedWaist = originalWaist * waistGlobalScale * waistRegionalScale;
 
   // Hip circumference projection
-  const hipSensitivity = RING_SENSITIVITY['Hip'] ?? 1.05;
-  const hipGlobalScale = 1 + (deltaBF * hipSensitivity / 100);
-  const hipRegionalScale = 1 + (overrides.hips / 100);
-  const originalHip = measures['HipCircumference'] ?? measures['Hip'] ?? bodyComp['Hip'] ?? 95;
+  const hipSensitivity = getRingSensitivity('Hip', sex);
+  const hipGlobalScale = 1 + (deltaBF * hipSensitivity) / 100;
+  const hipRegionalScale = 1 + overrides.hips / 100;
+  const originalHip =
+    measures['HipCircumference'] ?? measures['Hip'] ?? bodyComp['Hip'] ?? 95;
   const estimatedHip = originalHip * hipGlobalScale * hipRegionalScale;
 
-  // WHR
   const estimatedWHR = estimatedHip > 0 ? estimatedWaist / estimatedHip : 0;
 
   return {

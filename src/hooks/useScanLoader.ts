@@ -5,7 +5,10 @@ import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { parseOBJ, normalizeGeometry } from '@/lib/pipeline/objParser';
 import { parseCoreMeasuresCSV, parseBodyCompositionCSV } from '@/lib/pipeline/csvParser';
-import { groupLandmarksIntoRings } from '@/lib/pipeline/landmarkGrouper';
+import {
+  groupLandmarksIntoRings,
+  extractArmReferencePoints,
+} from '@/lib/pipeline/landmarkGrouper';
 import { classifyVertices, computeArmThreshold } from '@/lib/morph/segmentClassifier';
 import { validateOBJContent, validateCoreMeasuresCSV, validateBodyCompCSV } from '@/lib/pipeline/validator';
 import type { ScanData, LandmarkRing } from '@/types/scan';
@@ -80,11 +83,19 @@ export function useScanLoader() {
       // Group landmarks into rings (mm space)
       const rings = groupLandmarksIntoRings(landmarks);
 
+      // Extract per-side arm reference Y-heights (elbow/wrist/armpit) for the classifier
+      const armRefs = extractArmReferencePoints(landmarks, rings);
+
       // Compute arm threshold (mm space)
       const armThresholdMM = computeArmThreshold(rings);
 
       // Classify vertices using raw mm positions
-      const vertexBindings = classifyVertices(rawPositions, rings, armThresholdMM);
+      const vertexBindings = classifyVertices(
+        rawPositions,
+        rings,
+        armThresholdMM,
+        armRefs,
+      );
 
       // Normalize geometry
       const transform = normalizeGeometry(geometry);

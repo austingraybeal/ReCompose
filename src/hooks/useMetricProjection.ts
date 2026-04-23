@@ -3,8 +3,15 @@
 import { useMemo } from 'react';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
+import { useGenderStore } from '@/lib/stores/genderStore';
 import { projectMetrics } from '@/lib/morph/metricProjection';
-import type { ProjectedMetrics } from '@/types/scan';
+import type { ProjectedMetrics, SegmentOverrides } from '@/types/scan';
+import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
+
+const ZERO_OVERRIDES: SegmentOverrides = SEGMENT_ORDER.reduce((acc, id) => {
+  acc[id] = 0;
+  return acc;
+}, {} as SegmentOverrides);
 
 /**
  * Hook that computes projected metrics based on current slider positions.
@@ -18,6 +25,7 @@ export function useMetricProjection(): {
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
   const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
+  const sex = useGenderStore((s) => s.gender);
 
   const metrics = useMemo(() => {
     if (!scanData) return null;
@@ -27,22 +35,23 @@ export function useMetricProjection(): {
       globalBodyFat,
       segmentOverrides,
       scanData.rings,
-      scanData.measures
+      scanData.measures,
+      sex,
     );
-  }, [scanData, originalBodyFat, globalBodyFat, segmentOverrides]);
+  }, [scanData, originalBodyFat, globalBodyFat, segmentOverrides, sex]);
 
   const originalMetrics = useMemo(() => {
     if (!scanData) return null;
-    const zeroOverrides = { shoulders: 0, arms: 0, torso: 0, waist: 0, hips: 0, legs: 0 };
     return projectMetrics(
       scanData.bodyComp,
       originalBodyFat,
       originalBodyFat,
-      zeroOverrides,
+      ZERO_OVERRIDES,
       scanData.rings,
-      scanData.measures
+      scanData.measures,
+      sex,
     );
-  }, [scanData, originalBodyFat]);
+  }, [scanData, originalBodyFat, sex]);
 
   return { metrics, originalMetrics };
 }

@@ -1,9 +1,14 @@
 import type { AssessmentRecord, BIDSScores } from '@/types/assessment';
+import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
 
 /**
  * Generate CSV export of assessment scores for SPSS/R/Excel import.
  */
 export function generateCSVExport(record: AssessmentRecord, scores: BIDSScores): string {
+  const perceivedSegHeaders = SEGMENT_ORDER.map((id) => `perceived_${id}`);
+  const idealSegHeaders = SEGMENT_ORDER.map((id) => `ideal_${id}`);
+  const partnerSegHeaders = SEGMENT_ORDER.map((id) => `partner_${id}`);
+
   const headers = [
     'assessment_id',
     'timestamp',
@@ -16,24 +21,9 @@ export function generateCSVExport(record: AssessmentRecord, scores: BIDSScores):
     'perceived_global_bf',
     'ideal_global_bf',
     'partner_global_bf',
-    'perceived_shoulders',
-    'perceived_arms',
-    'perceived_torso',
-    'perceived_waist',
-    'perceived_hips',
-    'perceived_legs',
-    'ideal_shoulders',
-    'ideal_arms',
-    'ideal_torso',
-    'ideal_waist',
-    'ideal_hips',
-    'ideal_legs',
-    'partner_shoulders',
-    'partner_arms',
-    'partner_torso',
-    'partner_waist',
-    'partner_hips',
-    'partner_legs',
+    ...perceivedSegHeaders,
+    ...idealSegHeaders,
+    ...partnerSegHeaders,
     'bids_distortion',
     'bids_dissatisfaction',
     'bids_partner_discrepancy',
@@ -67,24 +57,9 @@ export function generateCSVExport(record: AssessmentRecord, scores: BIDSScores):
     p.globalBodyFat,
     i.globalBodyFat,
     pt.globalBodyFat,
-    p.segmentOverrides.shoulders,
-    p.segmentOverrides.arms,
-    p.segmentOverrides.torso,
-    p.segmentOverrides.waist,
-    p.segmentOverrides.hips,
-    p.segmentOverrides.legs,
-    i.segmentOverrides.shoulders,
-    i.segmentOverrides.arms,
-    i.segmentOverrides.torso,
-    i.segmentOverrides.waist,
-    i.segmentOverrides.hips,
-    i.segmentOverrides.legs,
-    pt.segmentOverrides.shoulders,
-    pt.segmentOverrides.arms,
-    pt.segmentOverrides.torso,
-    pt.segmentOverrides.waist,
-    pt.segmentOverrides.hips,
-    pt.segmentOverrides.legs,
+    ...SEGMENT_ORDER.map((id) => p.segmentOverrides[id]),
+    ...SEGMENT_ORDER.map((id) => i.segmentOverrides[id]),
+    ...SEGMENT_ORDER.map((id) => pt.segmentOverrides[id]),
     scores.distortion,
     scores.dissatisfaction,
     scores.partnerDiscrepancy,

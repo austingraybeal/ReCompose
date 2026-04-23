@@ -1,11 +1,11 @@
 import type { TaskResult, ActualMetrics, BIDSScores, SegmentDistortion } from '@/types/assessment';
 import type { SegmentId } from '@/types/scan';
-import { SEGMENTS } from '@/lib/constants/segmentDefs';
+import { SEGMENTS, SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
 
 /** BF% deviation threshold for clinical flag */
 export const CLINICAL_THRESHOLD = 5.0;
 
-const SEGMENT_IDS: SegmentId[] = ['shoulders', 'arms', 'torso', 'waist', 'hips', 'legs'];
+const SEGMENT_IDS: readonly SegmentId[] = SEGMENT_ORDER;
 
 export function calculateBIDSScores(
   perceived: TaskResult,

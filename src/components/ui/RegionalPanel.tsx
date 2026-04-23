@@ -8,8 +8,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export default function RegionalPanel() {
   const resetOverrides = useMorphStore((s) => s.resetRegionalOverrides);
-  const lockProportional = useMorphStore((s) => s.lockProportional);
-  const toggleLock = useMorphStore((s) => s.toggleLockProportional);
+  const linkMode = useMorphStore((s) => s.linkMode);
+  const toggleLinkMode = useMorphStore((s) => s.toggleLinkMode);
+  const lockProportional = linkMode === 'proportional';
   const open = useViewStore((s) => s.regionalPanelOpen);
   const setOpen = useViewStore((s) => s.setRegionalPanelOpen);
   const focusedSegment = useViewStore((s) => s.focusedSegment);
@@ -51,11 +52,17 @@ export default function RegionalPanel() {
             className="overflow-hidden"
           >
             <div className="flex flex-col gap-1 pb-2">
-              {/* Lock Proportional toggle */}
+              {/* Link Mode toggle — independent vs proportional */}
               <button
-                onClick={toggleLock}
+                onClick={toggleLinkMode}
                 className="flex items-center gap-2 px-3 py-1.5 text-rc-xs uppercase tracking-[1px]"
                 style={{ color: lockProportional ? 'var(--rc-accent)' : 'var(--rc-text-dim)' }}
+                aria-pressed={lockProportional}
+                title={
+                  lockProportional
+                    ? 'Linked: moving one segment shifts the whole body proportionally'
+                    : 'Independent: each segment moves alone'
+                }
               >
                 <div
                   className="w-3 h-3 rounded-sm border transition-colors"
@@ -64,7 +71,7 @@ export default function RegionalPanel() {
                     borderColor: lockProportional ? 'var(--rc-accent)' : 'var(--rc-border-default)',
                   }}
                 />
-                Lock Proportional
+                {lockProportional ? 'Linked' : 'Independent'}
               </button>
 
               {/* Segment sliders */}

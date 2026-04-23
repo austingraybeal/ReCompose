@@ -14,6 +14,12 @@ export const RING_NAMES = [
   'Seat',
   'Hip',
   'HipWidest',
+  // Arm rings — ElbowLeftArm/Right and WristLeftArm/Right use the `*Forward` suffix
+  // (not `Front`) in the scanner CSV. Both suffixes are accepted by the grouper.
+  'ElbowLeftArm',
+  'ElbowRightArm',
+  'WristLeftArm',
+  'WristRightArm',
   'UpperLeftThigh',
   'UpperRightThigh',
   'MidLeftThigh',
@@ -34,5 +40,13 @@ export const RING_NAMES = [
   'ActualAnkleRightLeg',
 ] as const;
 
-/** Cardinal directions for landmark points within a ring */
-export const CARDINAL_SUFFIXES = ['Front', 'Back', 'Left', 'Right'] as const;
+/**
+ * Cardinal direction suffixes for ring landmark points.
+ *
+ * Two anterior conventions coexist in the scanner CSV:
+ *   - `Front`   — used by torso and leg rings (e.g. `BustFront`, `UpperLeftThighFront`)
+ *   - `Forward` — used by arm rings            (e.g. `ElbowLeftArmForward`, `WristRightArmForward`)
+ *
+ * The landmark grouper treats both as the anterior cardinal.
+ */
+export const CARDINAL_SUFFIXES = ['Front', 'Forward', 'Back', 'Left', 'Right'] as const;

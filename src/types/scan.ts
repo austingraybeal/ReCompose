@@ -34,7 +34,9 @@ export interface BodyComposition {
 
 /** Per-vertex classification data computed at load time */
 export interface VertexBinding {
-  segmentId: string;
+  segmentId: SegmentId;
+  /** For arm vertices, which side of the body the vertex belongs to. */
+  armSide?: 'left' | 'right';
   ringAboveIdx: number;
   ringBelowIdx: number;
   /** 0 = at ringBelow, 1 = at ringAbove */
@@ -43,7 +45,7 @@ export interface VertexBinding {
   radialDistance: number;
   /** For transition zone vertices: weight toward adjacent segment (0 = fully this segment) */
   blendWeight: number;
-  blendSegmentId: string | null;
+  blendSegmentId: SegmentId | null;
 }
 
 /** Full parsed scan data */
@@ -60,8 +62,16 @@ export interface ScanData {
   adjacency: Uint32Array[];
 }
 
-/** The six body segment IDs */
-export type SegmentId = 'shoulders' | 'arms' | 'torso' | 'waist' | 'hips' | 'legs';
+/** The eight body segment IDs (arms split into upper_arms/forearms; legs split into thighs/calves). */
+export type SegmentId =
+  | 'shoulders'
+  | 'upper_arms'
+  | 'forearms'
+  | 'torso'
+  | 'waist'
+  | 'hips'
+  | 'thighs'
+  | 'calves';
 
 /** Segment override values */
 export type SegmentOverrides = Record<SegmentId, number>;

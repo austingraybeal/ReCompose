@@ -14,11 +14,13 @@ const MESH_COLOR = new Color('#bccad8');
 
 const SEGMENT_COLORS: Record<string, Color> = {
   shoulders: new Color('#4ac8e8'),
-  arms: new Color('#5de8d0'),
+  upper_arms: new Color('#5de8d0'),
+  forearms: new Color('#7af0e0'),
   torso: new Color('#4acfa0'),
   waist: new Color('#f0c84a'),
   hips: new Color('#f0764a'),
-  legs: new Color('#a78bfa'),
+  thighs: new Color('#a78bfa'),
+  calves: new Color('#c4a7ff'),
 };
 
 export default function BodyMesh() {

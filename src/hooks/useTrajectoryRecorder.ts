@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
-import type { SegmentId } from '@/types/scan';
+import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
 
 const DEBOUNCE_MS = 100;
 
@@ -43,8 +43,7 @@ export function useTrajectoryRecorder() {
         lastGlobalRef.current = state.globalBodyFat;
 
         // Check segment override changes
-        const segments: SegmentId[] = ['shoulders', 'arms', 'torso', 'waist', 'hips', 'legs'];
-        for (const seg of segments) {
+        for (const seg of SEGMENT_ORDER) {
           const prev = lastOverridesRef.current[seg];
           const curr = state.segmentOverrides[seg];
           if (prev !== undefined && curr !== prev) {
