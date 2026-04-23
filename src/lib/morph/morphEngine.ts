@@ -1,7 +1,7 @@
 import type { LandmarkRing, VertexBinding, SegmentOverrides, SegmentId } from '@/types/scan';
 import type { BodyGender } from '@/lib/stores/genderStore';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
-import { getArmSensitivity, type Sex } from './sensitivityModel';
+import { getArmSensitivity, getRingSensitivity, type Sex } from './sensitivityModel';
 
 // ════════════════════════════════════════════════════════════════
 // Constants
@@ -20,66 +20,6 @@ const LEG_SPLIT_HIGH = 0.28;
 /** Arm → shoulder-junction radial-center blend zone (normalized Y). */
 const ARM_JUNCTION_LOW = 0.56;
 const ARM_JUNCTION_HIGH = 0.70;
-
-// ════════════════════════════════════════════════════════════════
-// Gender-aware Y-based sensitivity curves (global BF response)
-// ════════════════════════════════════════════════════════════════
-
-function sensitivityMale(y: number): number {
-  const BASE = 0.22;
-  const g = (c: number, s: number, p: number) =>
-    p * Math.exp(-((y - c) ** 2) / (2 * s * s));
-  return (
-    BASE +
-    g(0.53, 0.09, 1.10) + // waist/belly — android
-    g(0.44, 0.09, 0.58) + // hips
-    g(0.62, 0.07, 0.38) + // chest
-    g(0.34, 0.10, 0.45) + // upper thighs
-    g(0.20, 0.10, 0.20) + // calves
-    g(0.72, 0.08, 0.32)   // upper chest/shoulders
-  );
-}
-
-function sensitivityFemale(y: number): number {
-  const BASE = 0.22;
-  const g = (c: number, s: number, p: number) =>
-    p * Math.exp(-((y - c) ** 2) / (2 * s * s));
-  return (
-    BASE +
-    g(0.53, 0.09, 0.82) + // waist/belly — less than male
-    g(0.44, 0.09, 0.90) + // hips — strong, gynoid
-    g(0.62, 0.07, 0.62) + // bust
-    g(0.34, 0.10, 0.75) + // upper thighs
-    g(0.20, 0.10, 0.22) + // calves
-    g(0.72, 0.08, 0.26)   // upper chest/shoulders
-  );
-}
-
-function sensitivityNeutral(y: number): number {
-  const BASE = 0.22;
-  const g = (c: number, s: number, p: number) =>
-    p * Math.exp(-((y - c) ** 2) / (2 * s * s));
-  return (
-    BASE +
-    g(0.53, 0.09, 1.00) +
-    g(0.44, 0.09, 0.72) +
-    g(0.62, 0.07, 0.50) +
-    g(0.34, 0.10, 0.58) +
-    g(0.20, 0.10, 0.22) +
-    g(0.72, 0.08, 0.30)
-  );
-}
-
-function sensitivity(y: number, gender: BodyGender): number {
-  switch (gender) {
-    case 'male':
-      return sensitivityMale(y);
-    case 'female':
-      return sensitivityFemale(y);
-    default:
-      return sensitivityNeutral(y);
-  }
-}
 
 // ════════════════════════════════════════════════════════════════
 // Gender-aware directional (front/back/lateral) control
@@ -106,8 +46,9 @@ function directionalScale(
     bellyBias = g(0.53, 0.07, 0.42) + g(0.48, 0.06, 0.30);
     bustBias = g(0.62, 0.05, 0.10);
     thighBias = g(0.34, 0.06, 0.08);
-    hipLateral = g(0.44, 0.08, 0.12);
-    thighLateral = g(0.33, 0.08, 0.08);
+    // Narrow hips in males: keep lateral hip bulge minimal
+    hipLateral = g(0.44, 0.08, 0.06);
+    thighLateral = g(0.33, 0.08, 0.05);
     backDamp = g(0.53, 0.10, 0.18);
   } else if (gender === 'female') {
     bellyBias = g(0.53, 0.07, 0.25) + g(0.48, 0.06, 0.18);
@@ -134,6 +75,27 @@ function directionalScale(
   mult += lateralBias * xDir;
 
   return 1.0 + delta * mult;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Ring-interpolated radial sensitivity
+//
+// Source of truth: sex-specific ring table in sensitivityModel.ts. The same
+// table drives metric projection, so mesh circumference growth and the
+// metrics panel always agree.
+// ════════════════════════════════════════════════════════════════
+
+function ringInterpolatedSensitivity(
+  binding: VertexBinding,
+  rings: LandmarkRing[],
+  sex: Sex,
+): number {
+  if (rings.length === 0) return 0;
+  const above = rings[binding.ringAboveIdx];
+  const below = rings[binding.ringBelowIdx];
+  const sAbove = above ? getRingSensitivity(above.name, sex) : 0;
+  const sBelow = below ? getRingSensitivity(below.name, sex) : 0;
+  return sBelow * (1 - binding.ringWeight) + sAbove * binding.ringWeight;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -273,15 +235,17 @@ function computeLegCenters(
  * Deform the scan mesh based on body fat % change and segment overrides.
  *
  * Key design:
- *   - Non-arm vertices use a gender-continuous Y-based sensitivity curve
+ *   - Non-arm vertices derive global BF response from the sex-specific ring
+ *     table, linearly interpolated between the vertex's bounding rings —
+ *     guarantees mesh circumference matches the metrics panel.
  *   - Arm vertices (upper_arms / forearms) use sex-specific sub-segment
- *     sensitivity from {@link getArmSensitivity}
+ *     sensitivity from {@link getArmSensitivity}.
  *   - Arms scale from per-arm radial centers, blending to body center at the
- *     shoulder junction
- *   - Hips and upper thighs scale from body center (no per-leg split above knee)
- *   - Per-leg centers activate only below the knee
- *   - Gender-aware directional control (belly forward, hips lateral, etc.)
- *   - Segment overrides adjust incrementally on top of the global baseline
+ *     shoulder junction.
+ *   - Hips and upper thighs scale from body center (no per-leg split above knee).
+ *   - Per-leg centers activate only below the knee.
+ *   - Gender-aware directional control (belly forward, hips lateral, etc.).
+ *   - Segment overrides adjust incrementally on top of the global baseline.
  */
 export function deformMesh(
   positions: Float32Array,
@@ -331,11 +295,13 @@ export function deformMesh(
 
     const armSegment = isArmSegment(binding.segmentId);
 
-    // Global BF response
+    // Global BF response — arms use flat per-sub-segment sensitivity;
+    // everything else uses ring-interpolated sensitivity from the sex-specific
+    // ring table (same source of truth as the metrics panel).
     let sens: number;
     if (binding.segmentId === 'upper_arms') sens = upperArmSens;
     else if (binding.segmentId === 'forearms') sens = forearmSens;
-    else sens = sensitivity(oy, gender);
+    else sens = ringInterpolatedSensitivity(binding, rings, sex);
 
     const ov = blendedSegmentOverride(oy, overrides, armSegment);
     const baseScale = Math.max(
