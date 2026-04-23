@@ -62,7 +62,8 @@ export default function BodyMesh() {
       deltaBodyFat,
       segmentOverrides,
       scanData.adjacency,
-      gender
+      gender,
+      scanData.armThreshold
     );
 
     positions.needsUpdate = true;

@@ -21,6 +21,24 @@ const LEG_SPLIT_HIGH = 0.28;
 const ARM_JUNCTION_LOW = 0.56;
 const ARM_JUNCTION_HIGH = 0.70;
 
+/**
+ * Smooth-blend band half-widths (unit-height space).
+ *  - ARM_BAND:  arm vs torso x-distance softening (~15mm on a 1750mm scan).
+ *  - ELBOW_BAND: upper-arm vs forearm Y softening (~30mm).
+ */
+const ARM_BAND = 0.01;
+const ELBOW_BAND = 0.02;
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  if (edge1 === edge0) return x < edge0 ? 0 : 1;
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function mix(a: number, b: number, t: number): number {
+  return a * (1 - t) + b * t;
+}
+
 // ════════════════════════════════════════════════════════════════
 // Gender-aware directional (front/back/lateral) control
 // ════════════════════════════════════════════════════════════════
@@ -281,6 +299,7 @@ export function deformMesh(
   overrides: SegmentOverrides,
   adjacency?: Uint32Array[],
   gender: BodyGender = 'neutral',
+  armThreshold?: number,
 ): void {
   const vertexCount = originalPositions.length / 3;
   const sex: Sex = gender;
@@ -304,6 +323,29 @@ export function deformMesh(
   const upperArmSens = getArmSensitivity('upper_arm', sex);
   const forearmSens = getArmSensitivity('forearm', sex);
 
+  // Arm/torso soft boundary. armThreshold is in unit-height space. Fall back
+  // to Bust-ring-based estimate if the caller didn't supply one.
+  let effectiveArmThreshold = armThreshold;
+  if (effectiveArmThreshold === undefined || effectiveArmThreshold <= 0) {
+    const bust = rings.find((r) => r.name === 'Bust');
+    if (bust) {
+      effectiveArmThreshold = ((bust.radius.left + bust.radius.right) / 2) * 1.05;
+    } else {
+      effectiveArmThreshold = 0.08; // sane default in unit-height space
+    }
+  }
+  const armEdge0 = effectiveArmThreshold - ARM_BAND;
+  const armEdge1 = effectiveArmThreshold + ARM_BAND;
+
+  // Elbow Y for upper-arm ↔ forearm smoothing. Use per-side ring height when
+  // present; fall back to whichever is available; else a mid-arm default.
+  const leftElbowRing = rings.find((r) => r.name === 'ElbowLeftArm');
+  const rightElbowRing = rings.find((r) => r.name === 'ElbowRightArm');
+  const fallbackElbowY =
+    (leftElbowRing?.height ?? rightElbowRing?.height) ?? 0.44;
+  const leftElbowY = leftElbowRing?.height ?? fallbackElbowY;
+  const rightElbowY = rightElbowRing?.height ?? fallbackElbowY;
+
   // ── Per-vertex deformation ──
   for (let i = 0; i < vertexCount; i++) {
     const binding = bindings[i];
@@ -318,53 +360,59 @@ export function deformMesh(
       continue;
     }
 
-    const armSegment = isArmSegment(binding.segmentId);
+    // ─── Continuous arm-ness / upper-arm-ness weights ───
+    const xDist = Math.abs(ox - axisCX);
+    const armness = smoothstep(armEdge0, armEdge1, xDist);
+    // Body-left arm vs body-right arm: engine convention uses ox < axisCX as
+    // one bucket (matches computeArmCenters). Pick the matching elbow Y.
+    const isNegativeX = ox < axisCX;
+    const elbowY = isNegativeX ? rightElbowY : leftElbowY;
+    const upperArmness = smoothstep(elbowY - ELBOW_BAND, elbowY + ELBOW_BAND, oy);
 
-    // Global BF response — arms use flat per-sub-segment sensitivity;
-    // everything else uses ring-interpolated sensitivity from the sex-specific
-    // ring table (same source of truth as the metrics panel).
-    let sens: number;
-    if (binding.segmentId === 'upper_arms') sens = upperArmSens;
-    else if (binding.segmentId === 'forearms') sens = forearmSens;
-    else sens = gaussianRingSensitivity(oy, rings, sex);
+    // ─── Sensitivity: smooth blend between torso Gaussian and arm sub-segment ───
+    const torsoSens = gaussianRingSensitivity(oy, rings, sex);
+    const armSens = mix(forearmSens, upperArmSens, upperArmness);
+    const sens = mix(torsoSens, armSens, armness);
 
-    const ov = blendedSegmentOverride(oy, overrides, armSegment);
+    // Segment-override pool is still binary (arm vs non-arm) — it's a UI
+    // concept, not a deformation-time concept. Route via armness >= 0.5.
+    const ov = blendedSegmentOverride(oy, overrides, armness >= 0.5);
     const baseScale = Math.max(
       MIN_SCALE,
       Math.min(MAX_SCALE, (1 + (deltaBodyFat * sens) / 100) * (1 + ov / 100)),
     );
 
-    // Determine radial center.
-    let cx: number;
-    let cz: number;
-
-    if (armSegment) {
-      const isLeft = ox < axisCX;
-      const armCX = isLeft ? arms.leftCX : arms.rightCX;
-      const armCZ = isLeft ? arms.leftCZ : arms.rightCZ;
-      const jb = Math.min(
-        1,
-        Math.max(0, (oy - ARM_JUNCTION_LOW) / (ARM_JUNCTION_HIGH - ARM_JUNCTION_LOW)),
-      );
-      const jbs = jb * jb * (3 - 2 * jb); // smoothstep
-      cx = armCX + jbs * (axisCX - armCX);
-      cz = armCZ + jbs * (axisCZ - armCZ);
-    } else if (oy < LEG_SPLIT_LOW) {
-      const isLeft = ox < axisCX;
-      cx = isLeft ? legs.leftCX : legs.rightCX;
-      cz = isLeft ? legs.leftCZ : legs.rightCZ;
+    // ─── Radial center: blend body/leg center ↔ per-arm center by armness ───
+    // Body/leg center (below-knee uses per-leg; knee band smoothsteps to axis).
+    let bodyCX: number;
+    let bodyCZ: number;
+    if (oy < LEG_SPLIT_LOW) {
+      bodyCX = isNegativeX ? legs.leftCX : legs.rightCX;
+      bodyCZ = isNegativeX ? legs.leftCZ : legs.rightCZ;
     } else if (oy < LEG_SPLIT_HIGH) {
       const t = (oy - LEG_SPLIT_LOW) / (LEG_SPLIT_HIGH - LEG_SPLIT_LOW);
-      const bl = t * t * (3 - 2 * t); // smoothstep
-      const isLeft = ox < axisCX;
-      const legCX = isLeft ? legs.leftCX : legs.rightCX;
-      const legCZ = isLeft ? legs.leftCZ : legs.rightCZ;
-      cx = legCX + bl * (axisCX - legCX);
-      cz = legCZ + bl * (axisCZ - legCZ);
+      const bl = t * t * (3 - 2 * t);
+      const legCX = isNegativeX ? legs.leftCX : legs.rightCX;
+      const legCZ = isNegativeX ? legs.leftCZ : legs.rightCZ;
+      bodyCX = legCX + bl * (axisCX - legCX);
+      bodyCZ = legCZ + bl * (axisCZ - legCZ);
     } else {
-      cx = axisCX;
-      cz = axisCZ;
+      bodyCX = axisCX;
+      bodyCZ = axisCZ;
     }
+    // Per-arm center with shoulder-junction smoothstep back to axis.
+    const rawArmCX = isNegativeX ? arms.leftCX : arms.rightCX;
+    const rawArmCZ = isNegativeX ? arms.leftCZ : arms.rightCZ;
+    const jb = Math.min(
+      1,
+      Math.max(0, (oy - ARM_JUNCTION_LOW) / (ARM_JUNCTION_HIGH - ARM_JUNCTION_LOW)),
+    );
+    const jbs = jb * jb * (3 - 2 * jb);
+    const armCX = rawArmCX + jbs * (axisCX - rawArmCX);
+    const armCZ = rawArmCZ + jbs * (axisCZ - rawArmCZ);
+
+    const cx = mix(bodyCX, armCX, armness);
+    const cz = mix(bodyCZ, armCZ, armness);
 
     // Compute direction from center and apply scale.
     const dx = ox - cx;

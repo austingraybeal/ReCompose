@@ -41,7 +41,8 @@ export function useBodyMorph() {
       deltaBodyFat,
       segmentOverrides,
       scanData.adjacency,
-      gender
+      gender,
+      scanData.armThreshold
     );
 
     positions.needsUpdate = true;
