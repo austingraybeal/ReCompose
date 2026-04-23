@@ -27,6 +27,15 @@ import {
 
 export type Sex = BodyGender;
 
+/**
+ * Global visual gain applied to all ring and arm sensitivity lookups.
+ * 1.0 = literature-calibrated baseline. Raise to make the mesh (and the
+ * matching metrics panel) respond more aggressively per 1% BF change;
+ * lower to soften. Acts as a pure multiplier so every sex-specific ratio
+ * is preserved.
+ */
+const SENSITIVITY_GAIN = 1.20;
+
 type RingSensitivityTable = Readonly<Record<string, number>>;
 
 const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
@@ -191,7 +200,7 @@ const ARM_SENSITIVITY_TABLE: Readonly<
 
 /** Look up radial sensitivity for a ring name given current sex. */
 export function getRingSensitivity(ringName: string, sex: Sex): number {
-  return RING_TABLES[sex][ringName] ?? 0;
+  return (RING_TABLES[sex][ringName] ?? 0) * SENSITIVITY_GAIN;
 }
 
 /** Look up sensitivity for an arm sub-segment (upper_arm or forearm). */
@@ -199,7 +208,7 @@ export function getArmSensitivity(
   subSegment: 'upper_arm' | 'forearm',
   sex: Sex,
 ): number {
-  return ARM_SENSITIVITY_TABLE[sex][subSegment];
+  return ARM_SENSITIVITY_TABLE[sex][subSegment] * SENSITIVITY_GAIN;
 }
 
 /**
@@ -212,7 +221,7 @@ export function getSegmentMeanSensitivity(segment: SegmentId, sex: Sex): number 
     female: SEGMENT_MEAN_SENSITIVITY_FEMALE,
     male: SEGMENT_MEAN_SENSITIVITY_MALE,
   } as const;
-  return tables[sex][segment];
+  return tables[sex][segment] * SENSITIVITY_GAIN;
 }
 
 // ─── Backwards-compatible exports ──────────────────────────────────────────
