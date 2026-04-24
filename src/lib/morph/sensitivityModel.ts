@@ -34,7 +34,7 @@ export type Sex = BodyGender;
  * lower to soften. Acts as a pure multiplier so every sex-specific ratio
  * is preserved.
  */
-const SENSITIVITY_GAIN = 1.30;
+const SENSITIVITY_GAIN = 1.40;
 
 type RingSensitivityTable = Readonly<Record<string, number>>;
 
