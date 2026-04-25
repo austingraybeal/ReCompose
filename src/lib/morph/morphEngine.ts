@@ -14,16 +14,24 @@ const MAX_SCALE = 1.65;
 const SEGMENT_OVERRIDE_STRENGTH = 0.35;
 
 /**
- * Per-leg center activation zone (normalized Y).
- * Below LEG_SPLIT_LOW: 100% per-leg center.
- * Above LEG_SPLIT_HIGH: 100% body center.
- * Between: smoothstep blend — covers the thigh so thighs scale around their
- * own leg mass (inner surface fills the midline gap, outer surface flares),
- * not around the body axis (which pushes inner surfaces apart on growth and
- * collapses them on shrink).
+ * Inner-thigh midline-pull Y window (normalized Y).
+ * The thigh region between top-of-calves (LEG_SPLIT_LOW) and bottom-of-hips
+ * (LEG_SPLIT_HIGH). All non-arm vertices scale radially from the body axis
+ * — that gives a continuous lateral lever arm from calf to hip, so no
+ * lateral kink. To restore the medial-merge behavior that the old per-leg
+ * radial center provided, the post-pass below pulls inner-thigh vertices
+ * toward the midline (on upscale) / away from the midline (on downscale)
+ * within this Y window.
  */
 const LEG_SPLIT_LOW = 0.22;
 const LEG_SPLIT_HIGH = 0.40;
+
+/**
+ * Inner-thigh midline-pull strength (unit-height space).
+ * 0.03 → ~5cm peak on a 1750mm person at finalScale 1.4. Tune down if
+ * thighs over-fuse, up if they still gap.
+ */
+const INNER_THIGH_PULL = 0.03;
 
 /** Arm → shoulder-junction radial-center blend zone (normalized Y). */
 const ARM_JUNCTION_LOW = 0.56;
@@ -394,24 +402,13 @@ export function deformMesh(
       Math.min(MAX_SCALE, (1 + (deltaBodyFat * sens) / 100) * (1 + ov / 100)),
     );
 
-    // ─── Radial center: blend body/leg center ↔ per-arm center by armness ───
-    // Body/leg center (below-knee uses per-leg; knee band smoothsteps to axis).
-    let bodyCX: number;
-    let bodyCZ: number;
-    if (oy < LEG_SPLIT_LOW) {
-      bodyCX = isNegativeX ? legs.leftCX : legs.rightCX;
-      bodyCZ = isNegativeX ? legs.leftCZ : legs.rightCZ;
-    } else if (oy < LEG_SPLIT_HIGH) {
-      const t = (oy - LEG_SPLIT_LOW) / (LEG_SPLIT_HIGH - LEG_SPLIT_LOW);
-      const bl = t * t * (3 - 2 * t);
-      const legCX = isNegativeX ? legs.leftCX : legs.rightCX;
-      const legCZ = isNegativeX ? legs.leftCZ : legs.rightCZ;
-      bodyCX = legCX + bl * (axisCX - legCX);
-      bodyCZ = legCZ + bl * (axisCZ - legCZ);
-    } else {
-      bodyCX = axisCX;
-      bodyCZ = axisCZ;
-    }
+    // ─── Radial center: blend body axis ↔ per-arm center by armness ───
+    // Non-arm vertices use the body axis so the lateral lever arm grows
+    // monotonically with |ox - axisCX| from calf to hip — no kink at the
+    // knee. Inner-thigh medial-merge behavior is restored by the post-pass
+    // below.
+    const bodyCX = axisCX;
+    const bodyCZ = axisCZ;
     // Per-arm center with shoulder-junction smoothstep back to axis.
     const rawArmCX = isNegativeX ? arms.leftCX : arms.rightCX;
     const rawArmCZ = isNegativeX ? arms.leftCZ : arms.rightCZ;
@@ -440,6 +437,29 @@ export function deformMesh(
       positions[i * 3] = cx + dx * finalScale;
       positions[i * 3 + 1] = oy; // preserve Y
       positions[i * 3 + 2] = cz + dz * finalScale;
+
+      // Inner-thigh midline pull. Y window peaks across the thigh and tapers
+      // at the calves and hips. X window restricts to the medial surface
+      // (between the body axis and the leg centroid X on this side). Pull
+      // sign follows (finalScale - 1): thighs merge on upscale, separate on
+      // downscale. Gated by (1 - armness) so arms are unaffected.
+      const yWindow =
+        smoothstep(LEG_SPLIT_LOW, LEG_SPLIT_LOW + 0.04, oy) *
+        (1 - smoothstep(LEG_SPLIT_HIGH - 0.04, LEG_SPLIT_HIGH, oy));
+      if (yWindow > 0 && armness < 1) {
+        const legCX = isNegativeX ? legs.leftCX : legs.rightCX;
+        const legHalfWidth = Math.abs(legCX - axisCX);
+        // X window: 1 from axis out to ~75% of legCX, ramps to 0 by legCX.
+        const innerEdge = axisCX + (isNegativeX ? -1 : 1) * legHalfWidth * 0.75;
+        const outerEdge = legCX;
+        // smoothstep with edge0 > edge1 (positive side) or edge0 < edge1
+        // (negative side) both produce 1 inside the inner band, 0 outside.
+        const innerX = smoothstep(outerEdge, innerEdge, ox);
+        const innerThighWeight = yWindow * innerX * (1 - armness);
+        const pull = innerThighWeight * (finalScale - 1) * INNER_THIGH_PULL;
+        const pullDir = isNegativeX ? 1 : -1;
+        positions[i * 3] += pullDir * pull;
+      }
     } else {
       positions[i * 3] = ox;
       positions[i * 3 + 1] = oy;
