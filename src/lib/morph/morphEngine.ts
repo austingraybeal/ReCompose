@@ -31,11 +31,13 @@ const ARM_JUNCTION_HIGH = 0.70;
 
 /**
  * Smooth-blend band half-widths (unit-height space).
- *  - ARM_BAND:  arm vs torso x-distance softening (~15mm on a 1750mm scan).
- *  - ELBOW_BAND: upper-arm vs forearm Y softening (~30mm).
+ *  - ARM_BAND:  arm vs torso x-distance softening (~40mm on a 1750mm scan).
+ *  - ELBOW_BAND: upper-arm vs forearm Y softening (~85mm). Wide enough that
+ *    the upper-arm ↔ forearm sensitivity step doesn't show as a kink at
+ *    high SENSITIVITY_GAIN.
  */
-const ARM_BAND = 0.01;
-const ELBOW_BAND = 0.02;
+const ARM_BAND = 0.025;
+const ELBOW_BAND = 0.05;
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   if (edge1 === edge0) return x < edge0 ? 0 : 1;
