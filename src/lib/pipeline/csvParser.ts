@@ -76,10 +76,23 @@ export function parseBodyCompositionCSV(csvText: string): BodyComposition {
     }
   }
 
+  const weight = raw['Weight'] ?? raw['TotalWeight'] ?? 0;
+
+  // Scanner exports name this key "BodyMassIndex" (legacy exports used "BMI").
+  // If neither is present, derive from weight + height. Scanner units are
+  // imperial: weight in lbs, height in inches when < 100 (a metric-cm export
+  // would read 100–250).
+  let bmi = raw['BMI'] ?? raw['BodyMassIndex'] ?? 0;
+  const height = raw['Height'] ?? 0;
+  if (bmi <= 0 && weight > 0 && height > 0) {
+    const heightIn = height < 100 ? height : height / 2.54;
+    bmi = (703 * weight) / (heightIn * heightIn);
+  }
+
   return {
     bodyFat: raw['BodyFat'] ?? raw['BodyFatPercentage'] ?? raw['BF%'] ?? 0,
-    bmi: raw['BMI'] ?? 0,
-    weight: raw['Weight'] ?? raw['TotalWeight'] ?? 0,
+    bmi,
+    weight,
     leanBodyMass: raw['LeanBodyMass'] ?? raw['LBM'] ?? 0,
     waistToHipRatio: raw['WaistToHipRatio'] ?? raw['WHR'] ?? 0,
     ...raw,
