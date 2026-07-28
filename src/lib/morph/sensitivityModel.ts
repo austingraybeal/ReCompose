@@ -42,8 +42,8 @@ const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
   Neck: 0.18,
 
-  Collar: 0.42,
-  OverArm: 0.95,
+  Collar: 0.52,
+  OverArm: 1.10,
 
   Bust: 0.55,
   BustWithDrop: 0.55,
@@ -72,27 +72,27 @@ const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
   MidRightThigh: 0.65,
   ActualMidLeftThigh: 0.65,
   ActualMidRightThigh: 0.65,
-  KneeLeftLeg: 0.58,
-  KneeRightLeg: 0.58,
-  ActualKneeLeftLeg: 0.58,
-  ActualKneeRightLeg: 0.58,
+  KneeLeftLeg: 0.63,
+  KneeRightLeg: 0.63,
+  ActualKneeLeftLeg: 0.63,
+  ActualKneeRightLeg: 0.63,
 
-  UnderKneeLeftLeg: 0.64,
-  UnderKneeRightLeg: 0.64,
-  CalfLeftLeg: 0.67,
-  CalfRightLeg: 0.67,
-  AnkleLeftLeg: 0.30,
-  AnkleRightLeg: 0.30,
-  ActualAnkleLeftLeg: 0.30,
-  ActualAnkleRightLeg: 0.30,
+  UnderKneeLeftLeg: 0.69,
+  UnderKneeRightLeg: 0.69,
+  CalfLeftLeg: 0.73,
+  CalfRightLeg: 0.73,
+  AnkleLeftLeg: 0.33,
+  AnkleRightLeg: 0.33,
+  ActualAnkleLeftLeg: 0.33,
+  ActualAnkleRightLeg: 0.33,
 });
 
 const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
   Neck: 0.16,
 
-  Collar: 0.40,
-  OverArm: 0.90,
+  Collar: 0.50,
+  OverArm: 1.05,
 
   Bust: 0.72,
   BustWithDrop: 0.72,
@@ -120,27 +120,27 @@ const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
   MidRightThigh: 0.78,
   ActualMidLeftThigh: 0.78,
   ActualMidRightThigh: 0.78,
-  KneeLeftLeg: 0.62,
-  KneeRightLeg: 0.62,
-  ActualKneeLeftLeg: 0.62,
-  ActualKneeRightLeg: 0.62,
+  KneeLeftLeg: 0.68,
+  KneeRightLeg: 0.68,
+  ActualKneeLeftLeg: 0.68,
+  ActualKneeRightLeg: 0.68,
 
-  UnderKneeLeftLeg: 0.68,
-  UnderKneeRightLeg: 0.68,
-  CalfLeftLeg: 0.72,
-  CalfRightLeg: 0.72,
-  AnkleLeftLeg: 0.32,
-  AnkleRightLeg: 0.32,
-  ActualAnkleLeftLeg: 0.32,
-  ActualAnkleRightLeg: 0.32,
+  UnderKneeLeftLeg: 0.74,
+  UnderKneeRightLeg: 0.74,
+  CalfLeftLeg: 0.78,
+  CalfRightLeg: 0.78,
+  AnkleLeftLeg: 0.36,
+  AnkleRightLeg: 0.36,
+  ActualAnkleLeftLeg: 0.36,
+  ActualAnkleRightLeg: 0.36,
 });
 
 const RING_SENSITIVITY_MALE: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
   Neck: 0.20,
 
-  Collar: 0.45,
-  OverArm: 1.00,
+  Collar: 0.55,
+  OverArm: 1.15,
 
   Bust: 0.39,
   BustWithDrop: 0.39,
@@ -168,19 +168,19 @@ const RING_SENSITIVITY_MALE: RingSensitivityTable = Object.freeze({
   MidRightThigh: 0.52,
   ActualMidLeftThigh: 0.52,
   ActualMidRightThigh: 0.52,
-  KneeLeftLeg: 0.52,
-  KneeRightLeg: 0.52,
-  ActualKneeLeftLeg: 0.52,
-  ActualKneeRightLeg: 0.52,
+  KneeLeftLeg: 0.58,
+  KneeRightLeg: 0.58,
+  ActualKneeLeftLeg: 0.58,
+  ActualKneeRightLeg: 0.58,
 
-  UnderKneeLeftLeg: 0.58,
-  UnderKneeRightLeg: 0.58,
-  CalfLeftLeg: 0.62,
-  CalfRightLeg: 0.62,
-  AnkleLeftLeg: 0.26,
-  AnkleRightLeg: 0.26,
-  ActualAnkleLeftLeg: 0.26,
-  ActualAnkleRightLeg: 0.26,
+  UnderKneeLeftLeg: 0.64,
+  UnderKneeRightLeg: 0.64,
+  CalfLeftLeg: 0.68,
+  CalfRightLeg: 0.68,
+  AnkleLeftLeg: 0.30,
+  AnkleRightLeg: 0.30,
+  ActualAnkleLeftLeg: 0.30,
+  ActualAnkleRightLeg: 0.30,
 });
 
 const RING_TABLES: Readonly<Record<Sex, RingSensitivityTable>> = Object.freeze({
@@ -199,9 +199,9 @@ const RING_TABLES: Readonly<Record<Sex, RingSensitivityTable>> = Object.freeze({
 const ARM_SENSITIVITY_TABLE: Readonly<
   Record<Sex, { upper_arm: number; forearm: number }>
 > = Object.freeze({
-  neutral: Object.freeze({ upper_arm: 0.61, forearm: 0.27 }),
-  female: Object.freeze({ upper_arm: 0.58, forearm: 0.26 }),
-  male: Object.freeze({ upper_arm: 0.64, forearm: 0.28 }),
+  neutral: Object.freeze({ upper_arm: 0.69, forearm: 0.35 }),
+  female: Object.freeze({ upper_arm: 0.66, forearm: 0.34 }),
+  male: Object.freeze({ upper_arm: 0.72, forearm: 0.36 }),
 });
 
 // ─── WHR-relative personalization ──────────────────────────────────────────

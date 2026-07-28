@@ -19,7 +19,7 @@ import {
  * into the same silhouette — the "no hip curvature at 5%" artifact.
  * Exported so metric projection obeys the same bounds as the mesh.
  */
-export const MIN_SCALE = 0.65;
+export const MIN_SCALE = 0.7;
 export const MAX_SCALE = 1.65;
 
 /**
@@ -561,10 +561,15 @@ export function deformMesh(
     const bodyCZ = axisCZ;
 
     // Arm radial center: this slice's own skeleton point on the arm-axis
-    // polyline, translated rigidly by the chest surface's displacement at
-    // the armpit so the whole arm rides the torso through every BF and
-    // override change. Falls back to the per-arm centroid on ring-less
-    // scans.
+    // polyline (falls back to the per-arm centroid on ring-less scans),
+    // translated so the arm rides the torso. The translation blends two
+    // regimes by how close the vertex is to the torso surface:
+    //  - inner arm / armpit-bridge geometry HUGS the chest wall, following
+    //    the chest's own displacement at this height (otherwise it stands
+    //    proud as flaps when the wider below-armpit chest moves further
+    //    than the armpit does);
+    //  - the outer/free side keeps the rigid armpit-anchored shift so the
+    //    limb stays straight instead of bending with the torso profile.
     const armAxis = isNegativeX ? armAxisNeg : armAxisPos;
     let rawArmCX: number;
     let rawArmCZ: number;
@@ -576,7 +581,16 @@ export function deformMesh(
       rawArmCX = isNegativeX ? arms.leftCX : arms.rightCX;
       rawArmCZ = isNegativeX ? arms.leftCZ : arms.rightCZ;
     }
-    const anchoredArmCX = rawArmCX + (isNegativeX ? armShiftNeg : armShiftPos);
+    const rigidShift = isNegativeX ? armShiftNeg : armShiftPos;
+    const localExtent = envelopeExtentAt(envelope, oy);
+    const localBodyScale = Math.max(
+      MIN_SCALE,
+      Math.min(MAX_SCALE, (1 + (deltaBodyFat * torsoSens) / 100) * (1 + ovBody / 100)),
+    );
+    const localShift = (isNegativeX ? -1 : 1) * localExtent * (localBodyScale - 1);
+    const hug = 1 - smoothstep(localExtent + 0.01, localExtent + 0.05, xDist);
+    const armShift = mix(rigidShift, localShift, hug);
+    const anchoredArmCX = rawArmCX + armShift;
     const anchoredArmCZ = rawArmCZ;
     // Shoulder-junction smoothstep back to the body axis.
     const jb = Math.min(
