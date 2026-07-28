@@ -153,7 +153,7 @@ function directionalScale(
  * ≈ 70mm on a 1750mm person. Tune lower for sharper waist emphasis, higher
  * for smoother transitions.
  */
-const RING_KERNEL_SIGMA = 0.04;
+const RING_KERNEL_SIGMA = 0.05;
 const RING_KERNEL_MIN_WEIGHT = 0.001;
 
 /** Ring names that are arm-only and must be excluded from torso/leg sampling. */
@@ -474,16 +474,29 @@ export function deformMesh(
     // below.
     const bodyCX = axisCX;
     const bodyCZ = axisCZ;
-    // Per-arm center with shoulder-junction smoothstep back to axis.
+
+    // Arms follow the torso silhouette: each arm slice's radial center is
+    // translated by the torso's own scale at this height (parent-bone
+    // behavior). Without this the arm stays planted in space while the
+    // torso shrinks away from it (gap/wings on downscale, separation when
+    // torso and upper-arm overrides diverge) or grows into it. The arm
+    // still thickens/thins about its own moving center via armSens.
+    const bodyScaleAtY = Math.max(
+      MIN_SCALE,
+      Math.min(MAX_SCALE, (1 + (deltaBodyFat * torsoSens) / 100) * (1 + ovBody / 100)),
+    );
     const rawArmCX = isNegativeX ? arms.leftCX : arms.rightCX;
     const rawArmCZ = isNegativeX ? arms.leftCZ : arms.rightCZ;
+    const anchoredArmCX = axisCX + (rawArmCX - axisCX) * bodyScaleAtY;
+    const anchoredArmCZ = axisCZ + (rawArmCZ - axisCZ) * bodyScaleAtY;
+    // Shoulder-junction smoothstep back to the body axis.
     const jb = Math.min(
       1,
       Math.max(0, (oy - armJunctionLow) / (armJunctionHigh - armJunctionLow)),
     );
     const jbs = jb * jb * (3 - 2 * jb);
-    const armCX = rawArmCX + jbs * (axisCX - rawArmCX);
-    const armCZ = rawArmCZ + jbs * (axisCZ - rawArmCZ);
+    const armCX = anchoredArmCX + jbs * (axisCX - anchoredArmCX);
+    const armCZ = anchoredArmCZ + jbs * (axisCZ - anchoredArmCZ);
 
     const cx = mix(bodyCX, armCX, armness);
     const cz = mix(bodyCZ, armCZ, armness);
