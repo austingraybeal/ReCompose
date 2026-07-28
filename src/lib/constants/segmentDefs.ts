@@ -47,9 +47,10 @@ export const SEGMENTS: SegmentDef[] = [
     // The top is effectively bounded by the Armpit points (handled in the classifier).
     rings: ['ElbowLeftArm', 'ElbowRightArm'],
     color: 'var(--rc-seg-upper-arms)',
-    yRange: [0.45, 0.74],
-    yCenter: 0.58,
-    sigma: 0.10,
+    // Hanging-arm anatomy: armpit ~0.70, elbow ~0.62 in unit height.
+    yRange: [0.60, 0.72],
+    yCenter: 0.66,
+    sigma: 0.09,
     isLateral: true,
   },
   {
@@ -59,9 +60,12 @@ export const SEGMENTS: SegmentDef[] = [
     // Forearms are bounded above by Elbow rings and below by Wrist rings.
     rings: ['ElbowLeftArm', 'ElbowRightArm', 'WristLeftArm', 'WristRightArm'],
     color: 'var(--rc-seg-forearms)',
-    yRange: [0.20, 0.45],
-    yCenter: 0.33,
-    sigma: 0.10,
+    // Elbow ~0.62 to wrist ~0.50; hands hang to ~0.40. The old 0.33
+    // center sat at THIGH height and made the forearm slider act on
+    // partially-arm lateral-leg vertices instead of the forearms.
+    yRange: [0.40, 0.60],
+    yCenter: 0.54,
+    sigma: 0.09,
     isLateral: true,
   },
   {
@@ -106,9 +110,10 @@ export const SEGMENTS: SegmentDef[] = [
       'ActualKneeLeftLeg', 'ActualKneeRightLeg',
     ],
     color: 'var(--rc-seg-thighs)',
-    yRange: [0.22, 0.39],
-    yCenter: 0.305,
-    sigma: 0.10,
+    // Hip crease ~0.39 to knee ~0.25.
+    yRange: [0.25, 0.39],
+    yCenter: 0.32,
+    sigma: 0.09,
   },
   {
     id: 'calves',
@@ -121,9 +126,12 @@ export const SEGMENTS: SegmentDef[] = [
       'ActualAnkleLeftLeg', 'ActualAnkleRightLeg',
     ],
     color: 'var(--rc-seg-calves)',
-    yRange: [0.0, 0.22],
-    yCenter: 0.11,
-    sigma: 0.10,
+    // Knee ~0.25 to floor; the calf muscle belly sits at ~0.19, not at
+    // the ankle — the old 0.11 center made the calves slider scale the
+    // ankle/shin and barely touch the calf itself.
+    yRange: [0.0, 0.25],
+    yCenter: 0.185,
+    sigma: 0.07,
   },
 ];
 

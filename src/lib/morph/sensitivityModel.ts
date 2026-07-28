@@ -41,8 +41,8 @@ type RingSensitivityTable = Readonly<Record<string, number>>;
 const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
 
-  Collar: 0.10,
-  OverArm: 0.40,
+  Collar: 0.18,
+  OverArm: 0.55,
 
   Bust: 0.55,
   BustWithDrop: 0.55,
@@ -75,10 +75,10 @@ const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
   ActualKneeLeftLeg: 0.22,
   ActualKneeRightLeg: 0.22,
 
-  UnderKneeLeftLeg: 0.28,
-  UnderKneeRightLeg: 0.28,
-  CalfLeftLeg: 0.44,
-  CalfRightLeg: 0.44,
+  UnderKneeLeftLeg: 0.32,
+  UnderKneeRightLeg: 0.32,
+  CalfLeftLeg: 0.51,
+  CalfRightLeg: 0.51,
   AnkleLeftLeg: 0.10,
   AnkleRightLeg: 0.10,
   ActualAnkleLeftLeg: 0.10,
@@ -88,8 +88,8 @@ const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
 const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
 
-  Collar: 0.08,
-  OverArm: 0.34,
+  Collar: 0.16,
+  OverArm: 0.50,
 
   Bust: 0.72,
   BustWithDrop: 0.72,
@@ -121,10 +121,10 @@ const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
   ActualKneeLeftLeg: 0.24,
   ActualKneeRightLeg: 0.24,
 
-  UnderKneeLeftLeg: 0.30,
-  UnderKneeRightLeg: 0.30,
-  CalfLeftLeg: 0.48,
-  CalfRightLeg: 0.48,
+  UnderKneeLeftLeg: 0.35,
+  UnderKneeRightLeg: 0.35,
+  CalfLeftLeg: 0.56,
+  CalfRightLeg: 0.56,
   AnkleLeftLeg: 0.12,
   AnkleRightLeg: 0.12,
   ActualAnkleLeftLeg: 0.12,
@@ -134,8 +134,8 @@ const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
 const RING_SENSITIVITY_MALE: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
 
-  Collar: 0.11,
-  OverArm: 0.46,
+  Collar: 0.20,
+  OverArm: 0.60,
 
   Bust: 0.39,
   BustWithDrop: 0.39,
@@ -167,10 +167,10 @@ const RING_SENSITIVITY_MALE: RingSensitivityTable = Object.freeze({
   ActualKneeLeftLeg: 0.20,
   ActualKneeRightLeg: 0.20,
 
-  UnderKneeLeftLeg: 0.26,
-  UnderKneeRightLeg: 0.26,
-  CalfLeftLeg: 0.40,
-  CalfRightLeg: 0.40,
+  UnderKneeLeftLeg: 0.30,
+  UnderKneeRightLeg: 0.30,
+  CalfLeftLeg: 0.46,
+  CalfRightLeg: 0.46,
   AnkleLeftLeg: 0.09,
   AnkleRightLeg: 0.09,
   ActualAnkleLeftLeg: 0.09,
@@ -193,9 +193,9 @@ const RING_TABLES: Readonly<Record<Sex, RingSensitivityTable>> = Object.freeze({
 const ARM_SENSITIVITY_TABLE: Readonly<
   Record<Sex, { upper_arm: number; forearm: number }>
 > = Object.freeze({
-  neutral: Object.freeze({ upper_arm: 0.35, forearm: 0.15 }),
-  female: Object.freeze({ upper_arm: 0.32, forearm: 0.14 }),
-  male: Object.freeze({ upper_arm: 0.39, forearm: 0.16 }),
+  neutral: Object.freeze({ upper_arm: 0.43, forearm: 0.18 }),
+  female: Object.freeze({ upper_arm: 0.40, forearm: 0.17 }),
+  male: Object.freeze({ upper_arm: 0.46, forearm: 0.19 }),
 });
 
 // ─── WHR-relative personalization ──────────────────────────────────────────

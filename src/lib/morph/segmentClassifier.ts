@@ -6,18 +6,6 @@ import type { ArmReferencePoints } from '@/lib/pipeline/landmarkGrouper';
 const TRANSITION_ZONE = 0.02;
 
 /**
- * Half-width of the armness seed's x-blend band, as a fraction of body
- * height (~26mm on a 1750mm scan). Matches the engine's ARM_BAND.
- */
-const ARMNESS_SEED_BAND_FRACTION = 0.015;
-
-function smoothstep01(edge0: number, edge1: number, x: number): number {
-  if (edge1 === edge0) return x < edge0 ? 0 : 1;
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
-
-/**
  * Anatomical upper-arm : forearm length ratio fallback.
  * Only used if ElbowLeft/ElbowRight landmarks are missing from a scan.
  * (~56% upper arm, ~44% forearm measured wrist→shoulder.)
@@ -359,8 +347,6 @@ export function classifyVertices(
     );
   }
 
-  const armnessSeedBand = ARMNESS_SEED_BAND_FRACTION * bodyHeight;
-
   // ─── Pass 2: classify every vertex ───
   for (let i = 0; i < vertexCount; i++) {
     const x = positions[i * 3];
@@ -370,14 +356,13 @@ export function classifyVertices(
     const ny = normalizeY(y);
     const armSide = armSideOf[i];
 
-    // Continuous armness seed (0 = body, 1 = arm), smoothed over the mesh
-    // graph afterwards by smoothArmnessField. Feet stay body.
-    const xDistI = Math.abs(x - centerX);
-    const armEdgeI = envelopeExtentAt(envelope, y) * ENVELOPE_ARM_MARGIN;
-    const armnessSeed =
-      y > ankleHeight
-        ? smoothstep01(armEdgeI - armnessSeedBand, armEdgeI + armnessSeedBand, xDistI)
-        : 0;
+    // Binary armness seed (0 = body, 1 = arm) matching Pass 1's decision.
+    // Deliberately sharp: an x-space blend band here crosses real surfaces
+    // (inner elbow, lateral calf) and leaves them permanently half-arm —
+    // they then track waist/hip sensitivity and bulge into discs. The graph
+    // diffusion in smoothArmnessField provides the smoothing instead, and
+    // only across true mesh connectivity (the armpit junction).
+    const armnessSeed = armSide !== 0 ? 1 : 0;
     let segmentId: SegmentId;
     let armSideLabel: 'left' | 'right' | undefined;
 

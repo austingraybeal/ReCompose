@@ -50,10 +50,12 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
         </span>
       </div>
 
+      {/* Range is a true circumference % now that override strength is 1.0;
+          ±15 keeps the extremes anatomically plausible. */}
       <input
         type="range"
-        min="-25"
-        max="25"
+        min="-15"
+        max="15"
         step="1"
         value={value}
         onChange={(e) => setOverride(segmentId, parseFloat(e.target.value))}
