@@ -419,11 +419,10 @@ export function deformMesh(
       ? kneeRings.reduce((sum, r) => sum + r.height, 0) / kneeRings.length - 0.03
       : LEG_SPLIT_LOW_DEFAULT;
 
-  // Rigid arm-anchor scale: the torso's scale AT THE ARMPIT, applied as one
-  // constant translation multiplier for the whole arm. Evaluating it per
-  // slice bent the arms — below the elbow the "torso" at that height is the
-  // hips (highest sensitivity), so forearms translated further than upper
-  // arms and the arm curved outward like a noodle.
+  // Rigid arm-anchor scale: the torso's scale AT THE ARMPIT. Evaluating it
+  // per slice bent the arms — below the elbow the "torso" at that height is
+  // the hips (highest sensitivity), so forearms translated further than
+  // upper arms and the arm curved outward like a noodle.
   const armAnchorSens = gaussianRingSensitivity(armJunctionHigh, rings, sex, androidness);
   const armAnchorOv = blendedSegmentOverride(armJunctionHigh, overrides, false);
   const armAnchorScale = Math.max(
@@ -433,6 +432,77 @@ export function deformMesh(
       (1 + (deltaBodyFat * armAnchorSens) / 100) * (1 + armAnchorOv / 100),
     ),
   );
+  // Arm translation = the CHEST SURFACE's lateral displacement at the
+  // armpit, not a proportional scaling of the arm's offset (an arm hangs
+  // ~16cm from the spine but the chest edge is only ~9cm out — scaling the
+  // offset moved arms ~1.7x further than the surface they ride on,
+  // detaching them in both directions).
+  const junctionExtentPos = bustRing
+    ? Math.abs((bustRing.left.x > axisCX ? bustRing.left.x : bustRing.right.x) - axisCX)
+    : 0.09;
+  const junctionExtentNeg = bustRing
+    ? Math.abs((bustRing.left.x <= axisCX ? bustRing.left.x : bustRing.right.x) - axisCX)
+    : 0.09;
+  const armShiftPos = junctionExtentPos * (armAnchorScale - 1);
+  const armShiftNeg = -junctionExtentNeg * (armAnchorScale - 1);
+
+  // Per-side arm AXIS polyline (armpit chest-edge → elbow ring center →
+  // wrist ring center). Scaling a whole arm about one centroid rotated it:
+  // shoulder slices sit at ~0.10 from the axis and wrist slices at ~0.23,
+  // so a single center dragged the top inward and the bottom outward — the
+  // "alien arm" look. Each slice now thickens about its own skeleton point.
+  const elbowRingPos = rings.find(
+    (r) => (r.name === 'ElbowLeftArm' || r.name === 'ElbowRightArm') && r.center.x > axisCX);
+  const elbowRingNeg = rings.find(
+    (r) => (r.name === 'ElbowLeftArm' || r.name === 'ElbowRightArm') && r.center.x <= axisCX);
+  const wristRingPos = rings.find(
+    (r) => (r.name === 'WristLeftArm' || r.name === 'WristRightArm') && r.center.x > axisCX);
+  const wristRingNeg = rings.find(
+    (r) => (r.name === 'WristLeftArm' || r.name === 'WristRightArm') && r.center.x <= axisCX);
+
+  interface ArmAxis { ys: number[]; xs: number[]; zs: number[] }
+  const buildArmAxis = (
+    topX: number, topZ: number,
+    elbow: LandmarkRing | undefined,
+    wrist: LandmarkRing | undefined,
+    fallbackX: number, fallbackZ: number,
+  ): ArmAxis | null => {
+    if (!elbow || !wrist) return null;
+    void fallbackX; void fallbackZ;
+    return {
+      ys: [armJunctionHigh, elbow.height, wrist.height],
+      xs: [topX, elbow.center.x, wrist.center.x],
+      zs: [topZ, elbow.center.z, wrist.center.z],
+    };
+  };
+  const sampleArmAxis = (axis: ArmAxis, y: number): { x: number; z: number } => {
+    const { ys, xs, zs } = axis;
+    if (y >= ys[0]) return { x: xs[0], z: zs[0] };
+    const last = ys.length - 1;
+    if (y <= ys[last]) return { x: xs[last], z: zs[last] };
+    for (let k = 0; k < last; k++) {
+      if (y <= ys[k] && y >= ys[k + 1]) {
+        const t = ys[k] > ys[k + 1] ? (y - ys[k + 1]) / (ys[k] - ys[k + 1]) : 0;
+        return {
+          x: xs[k + 1] + t * (xs[k] - xs[k + 1]),
+          z: zs[k + 1] + t * (zs[k] - zs[k + 1]),
+        };
+      }
+    }
+    return { x: xs[last], z: zs[last] };
+  };
+  const armAxisPos = bustRing
+    ? buildArmAxis(
+        bustRing.left.x > axisCX ? bustRing.left.x : bustRing.right.x,
+        bustRing.left.x > axisCX ? bustRing.left.z : bustRing.right.z,
+        elbowRingPos, wristRingPos, arms.rightCX, arms.rightCZ)
+    : null;
+  const armAxisNeg = bustRing
+    ? buildArmAxis(
+        bustRing.left.x <= axisCX ? bustRing.left.x : bustRing.right.x,
+        bustRing.left.x <= axisCX ? bustRing.left.z : bustRing.right.z,
+        elbowRingNeg, wristRingNeg, arms.leftCX, arms.leftCZ)
+    : null;
 
   // ── Per-vertex deformation ──
   for (let i = 0; i < vertexCount; i++) {
@@ -490,16 +560,24 @@ export function deformMesh(
     const bodyCX = axisCX;
     const bodyCZ = axisCZ;
 
-    // Arms follow the torso silhouette: the whole arm translates rigidly by
-    // the torso's scale at the ARMPIT (armAnchorScale). Without this the
-    // arm stays planted in space while the torso shrinks away from it
-    // (gap/wings on downscale, separation when torso and upper-arm
-    // overrides diverge) or grows into it. The arm still thickens/thins
-    // about its own moving center via armSens.
-    const rawArmCX = isNegativeX ? arms.leftCX : arms.rightCX;
-    const rawArmCZ = isNegativeX ? arms.leftCZ : arms.rightCZ;
-    const anchoredArmCX = axisCX + (rawArmCX - axisCX) * armAnchorScale;
-    const anchoredArmCZ = axisCZ + (rawArmCZ - axisCZ) * armAnchorScale;
+    // Arm radial center: this slice's own skeleton point on the arm-axis
+    // polyline, translated rigidly by the chest surface's displacement at
+    // the armpit so the whole arm rides the torso through every BF and
+    // override change. Falls back to the per-arm centroid on ring-less
+    // scans.
+    const armAxis = isNegativeX ? armAxisNeg : armAxisPos;
+    let rawArmCX: number;
+    let rawArmCZ: number;
+    if (armAxis) {
+      const p = sampleArmAxis(armAxis, oy);
+      rawArmCX = p.x;
+      rawArmCZ = p.z;
+    } else {
+      rawArmCX = isNegativeX ? arms.leftCX : arms.rightCX;
+      rawArmCZ = isNegativeX ? arms.leftCZ : arms.rightCZ;
+    }
+    const anchoredArmCX = rawArmCX + (isNegativeX ? armShiftNeg : armShiftPos);
+    const anchoredArmCZ = rawArmCZ;
     // Shoulder-junction smoothstep back to the body axis.
     const jb = Math.min(
       1,
