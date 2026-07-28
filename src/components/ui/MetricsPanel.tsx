@@ -81,6 +81,21 @@ export default function MetricsPanel() {
         <MetricRow label="Waist" value={metrics.waistCirc} originalValue={originalMetrics.waistCirc} unit="cm" />
         <MetricRow label="Hip" value={metrics.hipCirc} originalValue={originalMetrics.hipCirc} unit="cm" />
         <MetricRow label="WHR" value={metrics.whr} originalValue={originalMetrics.whr} unit="" precision={2} />
+        {originalMetrics.chestCirc > 0 && (
+          <MetricRow label="Chest" value={metrics.chestCirc} originalValue={originalMetrics.chestCirc} unit="cm" />
+        )}
+        {originalMetrics.bicepCirc > 0 && (
+          <MetricRow label="Upper Arm" value={metrics.bicepCirc} originalValue={originalMetrics.bicepCirc} unit="cm" />
+        )}
+        {originalMetrics.forearmCirc > 0 && (
+          <MetricRow label="Forearm" value={metrics.forearmCirc} originalValue={originalMetrics.forearmCirc} unit="cm" />
+        )}
+        {originalMetrics.thighCirc > 0 && (
+          <MetricRow label="Thigh" value={metrics.thighCirc} originalValue={originalMetrics.thighCirc} unit="cm" />
+        )}
+        {originalMetrics.calfCirc > 0 && (
+          <MetricRow label="Calf" value={metrics.calfCirc} originalValue={originalMetrics.calfCirc} unit="cm" />
+        )}
       </div>
     </div>
   );

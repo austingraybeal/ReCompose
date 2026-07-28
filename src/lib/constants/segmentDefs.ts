@@ -165,6 +165,24 @@ export const SEGMENT_MEAN_SENSITIVITY_MALE = {
   calves: 0.11,
 } as const satisfies Record<SegmentId, number>;
 
+/**
+ * Approximate share of total body volume per segment (sums to 1.0).
+ * Used to convert a single-segment override into its equivalent
+ * whole-body BF contribution for the linked-mode total readout.
+ * Derived from typical scan volume splits (torso ~60%, legs ~29%,
+ * arms ~11%) subdivided across the torso/leg segments.
+ */
+export const SEGMENT_VOLUME_SHARE = {
+  shoulders: 0.08,
+  upper_arms: 0.05,
+  forearms: 0.03,
+  torso: 0.18,
+  waist: 0.22,
+  hips: 0.18,
+  thighs: 0.18,
+  calves: 0.08,
+} as const satisfies Record<SegmentId, number>;
+
 /** Ordered list for UI rendering (top-to-bottom anatomy). */
 export const SEGMENT_ORDER: readonly SegmentId[] = [
   'shoulders',

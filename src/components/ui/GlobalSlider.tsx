@@ -1,20 +1,34 @@
 'use client';
 
 import { useMorphStore } from '@/lib/stores/morphStore';
+import { useGenderStore } from '@/lib/stores/genderStore';
+import { impliedBodyFatDelta } from '@/lib/morph/metricProjection';
 import { motion } from 'framer-motion';
 
 /**
  * Master body fat percentage slider with gradient track and hero display.
  * Uses a neutral color gradient (no red/green judgment).
+ *
+ * In linked mode the headline number reports the effective total —
+ * global BF plus the implied whole-body contribution of the segment
+ * overrides — while the slider thumb continues to track the global base.
  */
 export default function GlobalSlider() {
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
   const setGlobalBodyFat = useMorphStore((s) => s.setGlobalBodyFat);
+  const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
+  const linkMode = useMorphStore((s) => s.linkMode);
+  const sex = useGenderStore((s) => s.gender);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalBodyFat(parseFloat(e.target.value));
   };
+
+  const displayBodyFat =
+    linkMode === 'proportional'
+      ? Math.max(1, globalBodyFat + impliedBodyFatDelta(segmentOverrides, sex))
+      : globalBodyFat;
 
   const actualPosition = ((originalBodyFat - 5) / (55 - 5)) * 100;
 
@@ -27,12 +41,12 @@ export default function GlobalSlider() {
         <motion.div
           className="font-mono font-bold leading-none"
           style={{ fontSize: '52px', color: bfColor }}
-          key={Math.round(globalBodyFat)}
+          key={Math.round(displayBodyFat)}
           initial={{ opacity: 0.7, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'spring', damping: 20, stiffness: 200 }}
         >
-          {Math.round(globalBodyFat)}%
+          {Math.round(displayBodyFat)}%
         </motion.div>
         <div className="pb-2">
           <div className="text-rc-xs uppercase tracking-[3px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>

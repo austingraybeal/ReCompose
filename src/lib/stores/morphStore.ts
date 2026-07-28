@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import type { SegmentId, SegmentOverrides } from '@/types/scan';
 import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
-import { getSegmentMeanSensitivity, type Sex } from '@/lib/morph/sensitivityModel';
-import { useGenderStore } from './genderStore';
 
 export type LinkMode = 'independent' | 'proportional';
+
+/** Hard bounds for the global body-fat state, matching the UI slider. */
+const BF_MIN = 5;
+const BF_MAX = 55;
 
 const emptyOverrides = (): SegmentOverrides =>
   SEGMENT_ORDER.reduce((acc, id) => {
@@ -26,7 +28,7 @@ interface MorphState {
   toggleLinkMode: () => void;
 }
 
-export const useMorphStore = create<MorphState>((set, get) => ({
+export const useMorphStore = create<MorphState>((set) => ({
   originalBodyFat: 0,
   globalBodyFat: 0,
   segmentOverrides: emptyOverrides(),
@@ -35,35 +37,22 @@ export const useMorphStore = create<MorphState>((set, get) => ({
   setOriginalBodyFat: (bf) => set({ originalBodyFat: bf, globalBodyFat: bf }),
 
   // Global slider NEVER resets segment overrides — both apply additively.
-  setGlobalBodyFat: (bf) => set({ globalBodyFat: bf }),
+  // Clamped so no code path (UI or programmatic) can push BF outside the
+  // supported range.
+  setGlobalBodyFat: (bf) =>
+    set({ globalBodyFat: Math.min(BF_MAX, Math.max(BF_MIN, bf)) }),
 
-  setSegmentOverride: (segment, value) => {
-    const { linkMode, originalBodyFat } = get();
-
-    if (linkMode === 'independent') {
-      set((state) => ({
-        segmentOverrides: { ...state.segmentOverrides, [segment]: value },
-      }));
-      return;
-    }
-
-    // Proportional/linked mode: derive implied global-BF delta from this segment's
-    // mean sensitivity, shift globalBodyFat, and clear overrides so every other
-    // segment scales via its own sensitivity.
-    const sex: Sex = useGenderStore.getState().gender;
-    const meanSens = getSegmentMeanSensitivity(segment, sex);
-    if (meanSens <= 0) {
-      set((state) => ({
-        segmentOverrides: { ...state.segmentOverrides, [segment]: value },
-      }));
-      return;
-    }
-    const impliedBfDelta = value / meanSens;
-    set({
-      globalBodyFat: originalBodyFat + impliedBfDelta,
-      segmentOverrides: emptyOverrides(),
-    });
-  },
+  // Segment sliders always store their own override — the mesh layers the
+  // regional change on top of the global-BF base (game-character-creator
+  // style). Link mode only changes how the headline body-fat total is
+  // REPORTED: in 'proportional' (linked) mode the display adds the
+  // overrides' implied whole-body BF contribution (see impliedBodyFatDelta
+  // in metricProjection.ts). The deformation path is identical in both
+  // modes, so a segment slider can never warp the whole body.
+  setSegmentOverride: (segment, value) =>
+    set((state) => ({
+      segmentOverrides: { ...state.segmentOverrides, [segment]: value },
+    })),
 
   resetRegionalOverrides: () => set({ segmentOverrides: emptyOverrides() }),
 

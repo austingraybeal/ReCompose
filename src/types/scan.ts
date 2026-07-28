@@ -86,4 +86,10 @@ export interface ProjectedMetrics {
   waistCirc: number;
   hipCirc: number;
   whr: number;
+  /** Per-segment circumferences (cm, right side by default; 0 = not in scan) */
+  chestCirc: number;
+  bicepCirc: number;
+  forearmCirc: number;
+  thighCirc: number;
+  calfCirc: number;
 }

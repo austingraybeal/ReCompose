@@ -4,13 +4,61 @@ import type {
   ProjectedMetrics,
   LandmarkRing,
 } from '@/types/scan';
-import { getRingSensitivity, type Sex } from './sensitivityModel';
+import {
+  getArmSensitivity,
+  getRingSensitivity,
+  getSegmentMeanSensitivity,
+  type Sex,
+} from './sensitivityModel';
+import { SEGMENT_ORDER, SEGMENT_VOLUME_SHARE } from '@/lib/constants/segmentDefs';
+import { SEGMENT_OVERRIDE_STRENGTH } from './morphEngine';
+
+/**
+ * No projected circumference may shrink below this fraction of its original.
+ * The mesh engine clamps at MIN_SCALE=0.82; metrics get a looser floor so
+ * regional overrides can still register, but can never go absurd/negative.
+ */
+const MIN_CIRC_FRACTION = 0.5;
+
+/**
+ * Equivalent whole-body BF delta implied by the current segment overrides.
+ *
+ * A global BF delta d produces a radial change of sens_s * d in segment s.
+ * An override producing r_s% radial change in segment s contributes fat
+ * volume proportional to r_s * V_s (V_s = the segment's volume share), so
+ * the whole-body BF delta with the same total fat response is:
+ *   Σ(r_s * V_s) / Σ(V_t * sens_t)
+ * Bounded by construction: all sliders at ±25 imply roughly ±7 BF points.
+ */
+export function impliedBodyFatDelta(overrides: SegmentOverrides, sex: Sex): number {
+  let numerator = 0;
+  let denominator = 0;
+  for (const seg of SEGMENT_ORDER) {
+    const share = SEGMENT_VOLUME_SHARE[seg];
+    numerator += (overrides[seg] ?? 0) * SEGMENT_OVERRIDE_STRENGTH * share;
+    denominator += share * getSegmentMeanSensitivity(seg, sex);
+  }
+  return denominator > 0 ? numerator / denominator : 0;
+}
+
+/** Project one circumference through the global-BF and regional paths. */
+function projectCircumference(
+  original: number,
+  deltaBF: number,
+  sensitivity: number,
+  overrideValue: number,
+): number {
+  const globalScale = 1 + (deltaBF * sensitivity) / 100;
+  const regionalScale = 1 + (overrideValue * SEGMENT_OVERRIDE_STRENGTH) / 100;
+  return Math.max(original * MIN_CIRC_FRACTION, original * globalScale * regionalScale);
+}
 
 /**
  * Project body metrics at a given body fat percentage.
  *
- * Estimates projected weight, BMI, waist & hip circumference, and WHR based
- * on the current slider positions.
+ * Estimates projected weight, BMI, and key circumferences based on the
+ * current slider positions. Regional overrides use the same damping factor
+ * as the mesh engine so the numbers track what the avatar shows.
  */
 export function projectMetrics(
   bodyComp: BodyComposition,
@@ -45,37 +93,63 @@ export function projectMetrics(
     100;
   const estimatedWeight = Math.max(0, baseWeight + regionalWeightDelta);
 
-  // Height in meters (estimated from scan/body-comp).
-  const heightM =
+  // BMI via the original weight:BMI ratio — unit-independent as long as the
+  // parsed weight and BMI describe the same person (height² in the source
+  // units cancels out).
+  const estimatedBMI =
     bodyComp.weight > 0 && bodyComp.bmi > 0
-      ? Math.sqrt(bodyComp.weight / bodyComp.bmi)
-      : 1.7;
+      ? (estimatedWeight * bodyComp.bmi) / bodyComp.weight
+      : bodyComp.bmi;
 
-  const estimatedBMI = heightM > 0 ? estimatedWeight / (heightM * heightM) : bodyComp.bmi;
-
-  // Waist circumference projection
-  const waistSensitivity = getRingSensitivity('Waist', sex);
-  const waistGlobalScale = 1 + (deltaBF * waistSensitivity) / 100;
-  const waistRegionalScale = 1 + overrides.waist / 100;
+  // Circumference projections. Right-side measures are the default display.
   const originalWaist =
     measures['WaistCircumference'] ?? measures['Waist'] ?? bodyComp['Waist'] ?? 80;
-  const estimatedWaist = originalWaist * waistGlobalScale * waistRegionalScale;
+  const estimatedWaist = projectCircumference(
+    originalWaist, deltaBF, getRingSensitivity('Waist', sex), overrides.waist);
 
-  // Hip circumference projection
-  const hipSensitivity = getRingSensitivity('Hip', sex);
-  const hipGlobalScale = 1 + (deltaBF * hipSensitivity) / 100;
-  const hipRegionalScale = 1 + overrides.hips / 100;
   const originalHip =
     measures['HipCircumference'] ?? measures['Hip'] ?? bodyComp['Hip'] ?? 95;
-  const estimatedHip = originalHip * hipGlobalScale * hipRegionalScale;
+  const estimatedHip = projectCircumference(
+    originalHip, deltaBF, getRingSensitivity('Hip', sex), overrides.hips);
+
+  const originalChest = measures['ChestCircumference'] ?? 0;
+  const estimatedChest = projectCircumference(
+    originalChest, deltaBF, getRingSensitivity('Bust', sex), overrides.torso);
+
+  const originalBicep =
+    measures['BicepCircumferenceRight'] ?? measures['BicepCircumferenceLeft'] ?? 0;
+  const estimatedBicep = projectCircumference(
+    originalBicep, deltaBF, getArmSensitivity('upper_arm', sex), overrides.upper_arms);
+
+  const originalForearm =
+    measures['ForearmCircumferenceRight'] ?? measures['ForearmCircumferenceLeft'] ?? 0;
+  const estimatedForearm = projectCircumference(
+    originalForearm, deltaBF, getArmSensitivity('forearm', sex), overrides.forearms);
+
+  const originalThigh =
+    measures['ThighCircumferenceRight'] ?? measures['ThighCircumferenceLeft'] ?? 0;
+  const estimatedThigh = projectCircumference(
+    originalThigh, deltaBF, getRingSensitivity('UpperRightThigh', sex), overrides.thighs);
+
+  const originalCalf =
+    measures['CalfCircumferenceRight'] ?? measures['CalfCircumferenceLeft'] ?? 0;
+  const estimatedCalf = projectCircumference(
+    originalCalf, deltaBF, getRingSensitivity('CalfRightLeg', sex), overrides.calves);
 
   const estimatedWHR = estimatedHip > 0 ? estimatedWaist / estimatedHip : 0;
 
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+
   return {
-    weight: Math.round(estimatedWeight * 10) / 10,
-    bmi: Math.round(estimatedBMI * 10) / 10,
-    waistCirc: Math.round(estimatedWaist * 10) / 10,
-    hipCirc: Math.round(estimatedHip * 10) / 10,
+    weight: r1(estimatedWeight),
+    bmi: r1(estimatedBMI),
+    waistCirc: r1(estimatedWaist),
+    hipCirc: r1(estimatedHip),
     whr: Math.round(estimatedWHR * 100) / 100,
+    chestCirc: r1(estimatedChest),
+    bicepCirc: r1(estimatedBicep),
+    forearmCirc: r1(estimatedForearm),
+    thighCirc: r1(estimatedThigh),
+    calfCirc: r1(estimatedCalf),
   };
 }

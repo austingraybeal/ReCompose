@@ -10,8 +10,11 @@ import { getArmSensitivity, getRingSensitivity, type Sex } from './sensitivityMo
 const MIN_SCALE = 0.82;
 const MAX_SCALE = 1.65;
 
-/** Segment-override damping: +25 slider → ~8.75% scale change. */
-const SEGMENT_OVERRIDE_STRENGTH = 0.35;
+/**
+ * Segment-override damping: +25 slider → ~8.75% scale change.
+ * Exported so metric projection applies the same damping the mesh does.
+ */
+export const SEGMENT_OVERRIDE_STRENGTH = 0.35;
 
 /**
  * Inner-thigh midline-pull Y window (normalized Y).
