@@ -40,8 +40,8 @@ export const SEGMENT_OVERRIDE_STRENGTH = 1.0;
  * toward the midline (on upscale) / away from the midline (on downscale)
  * within this Y window.
  */
-const LEG_SPLIT_LOW = 0.22;
-const LEG_SPLIT_HIGH = 0.40;
+const LEG_SPLIT_LOW_DEFAULT = 0.22;
+const LEG_SPLIT_HIGH_DEFAULT = 0.40;
 
 /**
  * Inner-thigh midline-pull strength (unit-height space).
@@ -50,9 +50,14 @@ const LEG_SPLIT_HIGH = 0.40;
  */
 const INNER_THIGH_PULL = 0.03;
 
-/** Arm → shoulder-junction radial-center blend zone (normalized Y). */
-const ARM_JUNCTION_LOW = 0.56;
-const ARM_JUNCTION_HIGH = 0.70;
+/**
+ * Arm → shoulder-junction radial-center blend zone (normalized Y).
+ * Fallbacks only: when the scan provides a Bust ring, the junction is
+ * anchored per scan — the SS20 definitions place ChestCircumference
+ * "under the Armpits", so the Bust ring height IS armpit height.
+ */
+const ARM_JUNCTION_LOW_DEFAULT = 0.56;
+const ARM_JUNCTION_HIGH_DEFAULT = 0.70;
 
 /**
  * Smooth-blend band half-widths (unit-height space).
@@ -392,6 +397,28 @@ export function deformMesh(
   const leftElbowY = leftElbowRing?.height ?? fallbackElbowY;
   const rightElbowY = rightElbowRing?.height ?? fallbackElbowY;
 
+  // Per-scan anatomical anchors (SS20 landmark definitions):
+  // - Bust ring runs under the armpits → arm junction ends at bust height.
+  // - Upper-thigh rings sit just below the crotch; knee rings bound the
+  //   bottom of the thigh → inner-thigh pull window spans knee→crotch.
+  const bustRing = rings.find((r) => r.name === 'Bust');
+  const armJunctionHigh = bustRing?.height ?? ARM_JUNCTION_HIGH_DEFAULT;
+  const armJunctionLow = armJunctionHigh - 0.14;
+  const upperThighRings = rings.filter(
+    (r) => r.name === 'UpperLeftThigh' || r.name === 'UpperRightThigh',
+  );
+  const kneeRings = rings.filter(
+    (r) => r.name === 'KneeLeftLeg' || r.name === 'KneeRightLeg',
+  );
+  const legSplitHigh =
+    upperThighRings.length > 0
+      ? Math.min(...upperThighRings.map((r) => r.height)) - 0.005
+      : LEG_SPLIT_HIGH_DEFAULT;
+  const legSplitLow =
+    kneeRings.length > 0
+      ? kneeRings.reduce((sum, r) => sum + r.height, 0) / kneeRings.length - 0.03
+      : LEG_SPLIT_LOW_DEFAULT;
+
   // ── Per-vertex deformation ──
   for (let i = 0; i < vertexCount; i++) {
     const binding = bindings[i];
@@ -452,7 +479,7 @@ export function deformMesh(
     const rawArmCZ = isNegativeX ? arms.leftCZ : arms.rightCZ;
     const jb = Math.min(
       1,
-      Math.max(0, (oy - ARM_JUNCTION_LOW) / (ARM_JUNCTION_HIGH - ARM_JUNCTION_LOW)),
+      Math.max(0, (oy - armJunctionLow) / (armJunctionHigh - armJunctionLow)),
     );
     const jbs = jb * jb * (3 - 2 * jb);
     const armCX = rawArmCX + jbs * (axisCX - rawArmCX);
@@ -482,8 +509,8 @@ export function deformMesh(
       // sign follows (finalScale - 1): thighs merge on upscale, separate on
       // downscale. Gated by (1 - armness) so arms are unaffected.
       const yWindow =
-        smoothstep(LEG_SPLIT_LOW, LEG_SPLIT_LOW + 0.04, oy) *
-        (1 - smoothstep(LEG_SPLIT_HIGH - 0.04, LEG_SPLIT_HIGH, oy));
+        smoothstep(legSplitLow, legSplitLow + 0.04, oy) *
+        (1 - smoothstep(legSplitHigh - 0.04, legSplitHigh, oy));
       if (yWindow > 0 && armness < 1) {
         const legCX = isNegativeX ? legs.leftCX : legs.rightCX;
         const legHalfWidth = Math.abs(legCX - axisCX);

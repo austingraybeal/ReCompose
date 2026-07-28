@@ -1,5 +1,5 @@
 import type { LandmarkPoint, LandmarkRing } from '@/types/scan';
-import { CARDINAL_SUFFIXES } from '@/lib/constants/bodyRegions';
+import { CARDINAL_SUFFIXES, RING_NAMES } from '@/lib/constants/bodyRegions';
 
 /**
  * Parse a landmark name into `{ring, direction}` using the cardinal-suffix
@@ -30,14 +30,29 @@ function parseCardinalLandmark(
 
 /**
  * Detect ring base names from landmark keys by finding groups that share
- * at least two cardinal-suffix variants (Front/Forward/Back/Left/Right).
+ * at least two cardinal-suffix variants (Front/Forward/Back/Left/Right),
+ * restricted to the known real cross-section rings in RING_NAMES.
+ *
+ * The restriction is load-bearing: the scanner CSV also contains PAIRED
+ * side landmarks (WristLeft/WristRight, ElbowLeft/ElbowRight,
+ * ShoulderLeft/Right, ArmpitLeft/Right, BustPointLeft/Right, the
+ * Bust30..330Degrees probes, etc.) whose names parse like cardinals of a
+ * single ring. Unfiltered, they fabricate giant fake rings — e.g. a
+ * "Wrist" ring spanning both wrists (~370mm half-width at wrist height)
+ * that inflated the lateral envelope so arms classified as body in
+ * stripes at elbow/wrist heights (the disc artifacts), and a cloud of
+ * zero-sensitivity fake rings around the chest that dragged the Gaussian
+ * sensitivity kernel down (the under-responsive shoulders/bust).
  */
+const KNOWN_RINGS: ReadonlySet<string> = new Set(RING_NAMES);
+
 function detectRingNames(landmarks: Record<string, LandmarkPoint>): string[] {
   const candidates = new Map<string, Set<Direction>>();
 
   for (const key of Object.keys(landmarks)) {
     const parsed = parseCardinalLandmark(key);
     if (!parsed) continue;
+    if (!KNOWN_RINGS.has(parsed.ring)) continue;
     if (!candidates.has(parsed.ring)) candidates.set(parsed.ring, new Set());
     candidates.get(parsed.ring)!.add(parsed.direction);
   }

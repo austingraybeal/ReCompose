@@ -40,6 +40,7 @@ type RingSensitivityTable = Readonly<Record<string, number>>;
 
 const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
+  Neck: 0.12,
 
   Collar: 0.18,
   OverArm: 0.55,
@@ -50,6 +51,7 @@ const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
 
   Waist: 1.50,
   WaistAt50: 1.50,
+  NarrowWaist: 1.28,
   StomachFP: 1.60,
   StomachMax: 1.60,
   Abdomen: 1.40,
@@ -87,6 +89,7 @@ const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
 
 const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
+  Neck: 0.10,
 
   Collar: 0.16,
   OverArm: 0.50,
@@ -97,6 +100,7 @@ const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
 
   Waist: 1.35,
   WaistAt50: 1.35,
+  NarrowWaist: 1.10,
   StomachFP: 1.44,
   StomachMax: 1.44,
   Abdomen: 1.26,
@@ -133,6 +137,7 @@ const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
 
 const RING_SENSITIVITY_MALE: RingSensitivityTable = Object.freeze({
   HeadCircum: 0.00,
+  Neck: 0.14,
 
   Collar: 0.20,
   OverArm: 0.60,
@@ -143,6 +148,7 @@ const RING_SENSITIVITY_MALE: RingSensitivityTable = Object.freeze({
 
   Waist: 1.73,
   WaistAt50: 1.73,
+  NarrowWaist: 1.45,
   StomachFP: 1.92,
   StomachMax: 1.92,
   Abdomen: 1.61,

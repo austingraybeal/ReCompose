@@ -1,6 +1,7 @@
 /** Ring names that can appear in the Core Measures CSV landmark data */
 export const RING_NAMES = [
   'HeadCircum',
+  'Neck',
   'Collar',
   'OverArm',
   'Bust',
@@ -8,6 +9,7 @@ export const RING_NAMES = [
   'UnderBust',
   'Waist',
   'WaistAt50',
+  'NarrowWaist',
   'StomachFP',
   'StomachMax',
   'Abdomen',

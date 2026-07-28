@@ -107,10 +107,13 @@ export function projectMetrics(
       : bodyComp.bmi;
 
   // Circumference projections. Right-side measures are the default display.
+  // NarrowWaist matches the scanner's own body-composition "Waist" output
+  // (natural waist); WaistCircumference is the tilted contour variant.
   const originalWaist =
+    measures['NarrowWaistTapeMeasure'] ?? measures['NarrowWaist'] ??
     measures['WaistCircumference'] ?? measures['Waist'] ?? bodyComp['Waist'] ?? 80;
   const estimatedWaist = projectCircumference(
-    originalWaist, deltaBF, getRingSensitivity('Waist', sex, androidness), overrides.waist);
+    originalWaist, deltaBF, getRingSensitivity('NarrowWaist', sex, androidness), overrides.waist);
 
   const originalHip =
     measures['HipCircumference'] ?? measures['Hip'] ?? bodyComp['Hip'] ?? 95;
