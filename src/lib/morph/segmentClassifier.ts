@@ -177,6 +177,68 @@ export function smoothArmnessField(
   }
 }
 
+/**
+ * Mark scan-bridge sliver vertices: any vertex with an incident edge much
+ * longer than the mesh's median edge is part of stretched webbing spanning
+ * an air gap (armpit, crotch). The engine re-settles these to their
+ * neighbor average after deformation so they can never stand proud of the
+ * surfaces as tassels/flaps. Returns the number of pinned vertices.
+ * If a threshold pins an implausible fraction of the mesh (>3%), it is
+ * raised and the pass re-run, so healthy dense scans are never damaged.
+ */
+export function markSeamBridges(
+  bindings: VertexBinding[],
+  adjacency: Uint32Array[],
+  positions: Float32Array,
+): number {
+  const n = bindings.length;
+  if (!adjacency || adjacency.length !== n) return 0;
+
+  const edgeLengths: number[] = [];
+  for (let i = 0; i < n; i += 7) {
+    const neighbors = adjacency[i];
+    if (!neighbors) continue;
+    for (let j = 0; j < neighbors.length; j++) {
+      const k = neighbors[j];
+      if (k <= i) continue;
+      const dx = positions[i * 3] - positions[k * 3];
+      const dy = positions[i * 3 + 1] - positions[k * 3 + 1];
+      const dz = positions[i * 3 + 2] - positions[k * 3 + 2];
+      edgeLengths.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+    }
+  }
+  if (edgeLengths.length === 0) return 0;
+  edgeLengths.sort((a, b) => a - b);
+  const median = edgeLengths[Math.floor(edgeLengths.length / 2)];
+  if (!(median > 0)) return 0;
+
+  for (const factor of [4, 6, 9]) {
+    const limit = median * factor;
+    const limitSq = limit * limit;
+    let pinned = 0;
+    for (let i = 0; i < n; i++) {
+      if (bindings[i]) bindings[i].seamPinned = false;
+    }
+    for (let i = 0; i < n; i++) {
+      const neighbors = adjacency[i];
+      if (!neighbors || !bindings[i]) continue;
+      for (let j = 0; j < neighbors.length; j++) {
+        const k = neighbors[j];
+        const dx = positions[i * 3] - positions[k * 3];
+        const dy = positions[i * 3 + 1] - positions[k * 3 + 1];
+        const dz = positions[i * 3 + 2] - positions[k * 3 + 2];
+        if (dx * dx + dy * dy + dz * dz > limitSq) {
+          bindings[i].seamPinned = true;
+          pinned++;
+          break;
+        }
+      }
+    }
+    if (pinned <= n * 0.03) return pinned;
+  }
+  return 0;
+}
+
 /** Determine which non-lateral segment owns a given normalized-Y height. */
 function getSegmentForHeight(normalizedY: number): SegmentId {
   for (const seg of SEGMENTS) {

@@ -13,6 +13,7 @@ import {
   classifyVertices,
   computeArmThreshold,
   smoothArmnessField,
+  markSeamBridges,
 } from '@/lib/morph/segmentClassifier';
 import { validateOBJContent, validateCoreMeasuresCSV, validateBodyCompCSV } from '@/lib/pipeline/validator';
 import type { ScanData, LandmarkRing } from '@/types/scan';
@@ -152,6 +153,9 @@ export function useScanLoader() {
       // Diffuse the armness seed over the mesh surface so the arm/torso
       // transition is smooth everywhere (no x-threshold flip lines).
       smoothArmnessField(vertexBindings, adjacency);
+
+      // Flag scan-bridge slivers (armpit webbing) for per-frame settling.
+      markSeamBridges(vertexBindings, adjacency, originalPositions);
 
       const scanData: ScanData = {
         geometry,

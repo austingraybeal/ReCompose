@@ -42,6 +42,11 @@ export interface VertexBinding {
    * envelope and diffused over the mesh graph at load time.
    */
   armness?: number;
+  /**
+   * Scan-bridge sliver vertex (e.g. armpit webbing spanning an air gap).
+   * The engine re-settles these to their neighbor average each frame.
+   */
+  seamPinned?: boolean;
   ringAboveIdx: number;
   ringBelowIdx: number;
   /** 0 = at ringBelow, 1 = at ringAbove */

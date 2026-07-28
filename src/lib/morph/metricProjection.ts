@@ -11,7 +11,7 @@ import {
   type Sex,
 } from './sensitivityModel';
 import { SEGMENT_ORDER, SEGMENT_VOLUME_SHARE } from '@/lib/constants/segmentDefs';
-import { SEGMENT_OVERRIDE_STRENGTH, MIN_SCALE, MAX_SCALE } from './morphEngine';
+import { SEGMENT_OVERRIDE_STRENGTH, softClampScale } from './morphEngine';
 
 /**
  * No projected circumference may shrink below this fraction of its original.
@@ -58,7 +58,7 @@ function projectCircumference(
 ): number {
   const globalScale = 1 + (deltaBF * sensitivity) / 100;
   const regionalScale = 1 + (overrideValue * SEGMENT_OVERRIDE_STRENGTH) / 100;
-  const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, globalScale * regionalScale));
+  const scale = softClampScale(globalScale * regionalScale);
   return Math.max(original * MIN_CIRC_FRACTION, original * scale);
 }
 
