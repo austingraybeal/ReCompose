@@ -12,14 +12,23 @@ import {
 // Constants
 // ════════════════════════════════════════════════════════════════
 
-const MIN_SCALE = 0.82;
+/**
+ * Radial scale clamps. MIN_SCALE 0.72 lets high-sensitivity regions
+ * (hips/waist at large negative delta-BF) actually differentiate from
+ * low-sensitivity regions — the old 0.82 floor flattened hips, thighs
+ * and calves to the same shrink at very low BF, reading as uniform
+ * tube legs.
+ */
+const MIN_SCALE = 0.72;
 const MAX_SCALE = 1.65;
 
 /**
- * Segment-override damping: +25 slider → ~8.75% scale change.
- * Exported so metric projection applies the same damping the mesh does.
+ * Segment-override strength. 1.0 = the slider's face value is the actual
+ * circumference change (+25% slider → +25%). The engine's MIN/MAX scale
+ * clamps still bound the combined global+override result.
+ * Exported so metric projection applies the same factor the mesh does.
  */
-export const SEGMENT_OVERRIDE_STRENGTH = 0.35;
+export const SEGMENT_OVERRIDE_STRENGTH = 1.0;
 
 /**
  * Inner-thigh midline-pull Y window (normalized Y).
@@ -154,6 +163,7 @@ function gaussianRingSensitivity(
   y: number,
   rings: readonly LandmarkRing[],
   sex: Sex,
+  androidness?: number,
 ): number {
   const twoSigmaSq = 2 * RING_KERNEL_SIGMA * RING_KERNEL_SIGMA;
   let sum = 0;
@@ -163,7 +173,7 @@ function gaussianRingSensitivity(
     const d = y - ring.height;
     const w = Math.exp(-(d * d) / twoSigmaSq);
     if (w < RING_KERNEL_MIN_WEIGHT) continue;
-    sum += getRingSensitivity(ring.name, sex) * w;
+    sum += getRingSensitivity(ring.name, sex, androidness) * w;
     weightSum += w;
   }
   return weightSum > 0 ? sum / weightSum : 0;
@@ -177,7 +187,9 @@ function gaussianRingSensitivity(
  * Blend segment-override values by Gaussian Y-distance.
  * Lateral segments (arms) and non-lateral segments are blended against their
  * own vertex population so an arm override only affects arm vertices and a
- * torso override only affects torso vertices.
+ * torso override only affects torso vertices. The shoulders segment also
+ * contributes to the arm pool: deltoid-cap vertices carry high armness, and
+ * without this the shoulders slider could never reach the outer shoulder.
  */
 function blendedSegmentOverride(
   y: number,
@@ -187,7 +199,8 @@ function blendedSegmentOverride(
   let totalWeight = 0;
   let blendedValue = 0;
   for (const seg of SEGMENTS) {
-    if (Boolean(seg.isLateral) !== isArm) continue;
+    const inArmPool = Boolean(seg.isLateral) || seg.id === 'shoulders';
+    if (isArm ? !inArmPool : Boolean(seg.isLateral)) continue;
     const dist = y - seg.yCenter;
     const w = Math.exp(-(dist * dist) / (2 * seg.sigma * seg.sigma));
     if (w > 0.001) {
@@ -330,6 +343,7 @@ export function deformMesh(
   adjacency?: Uint32Array[],
   gender: BodyGender = 'neutral',
   armThreshold?: number,
+  androidness?: number,
 ): void {
   const vertexCount = originalPositions.length / 3;
   const sex: Sex = gender;
@@ -350,8 +364,8 @@ export function deformMesh(
   const legs = computeLegCenters(originalPositions, bindings, vertexCount, axisCX, axisCZ);
 
   // Pre-compute sex-specific arm sub-segment global BF response
-  const upperArmSens = getArmSensitivity('upper_arm', sex);
-  const forearmSens = getArmSensitivity('forearm', sex);
+  const upperArmSens = getArmSensitivity('upper_arm', sex, androidness);
+  const forearmSens = getArmSensitivity('forearm', sex, androidness);
 
   // Arm/torso soft boundary — Y-aware silhouette envelope. A vertex reads
   // as arm only when it sits laterally beyond the body surface at its own
@@ -393,9 +407,17 @@ export function deformMesh(
     }
 
     // ─── Continuous arm-ness / upper-arm-ness weights ───
+    // Preferred source: the load-time graph-diffused field on the binding —
+    // smooth across the armpit, immune to x-threshold flip lines. Pointwise
+    // envelope fallback only for bindings from older load paths.
     const xDist = Math.abs(ox - axisCX);
-    const armEdge = envelopeExtentAt(envelope, oy) * ENVELOPE_ARM_MARGIN;
-    const armness = smoothstep(armEdge - ARM_BAND, armEdge + ARM_BAND, xDist);
+    let armness: number;
+    if (binding.armness !== undefined) {
+      armness = binding.armness;
+    } else {
+      const armEdge = envelopeExtentAt(envelope, oy) * ENVELOPE_ARM_MARGIN;
+      armness = smoothstep(armEdge - ARM_BAND, armEdge + ARM_BAND, xDist);
+    }
     // Body-left arm vs body-right arm: engine convention uses ox < axisCX as
     // one bucket (matches computeArmCenters). Pick the matching elbow Y.
     const isNegativeX = ox < axisCX;
@@ -403,13 +425,16 @@ export function deformMesh(
     const upperArmness = smoothstep(elbowY - ELBOW_BAND, elbowY + ELBOW_BAND, oy);
 
     // ─── Sensitivity: smooth blend between torso Gaussian and arm sub-segment ───
-    const torsoSens = gaussianRingSensitivity(oy, rings, sex);
+    const torsoSens = gaussianRingSensitivity(oy, rings, sex, androidness);
     const armSens = mix(forearmSens, upperArmSens, upperArmness);
     const sens = mix(torsoSens, armSens, armness);
 
-    // Segment-override pool is still binary (arm vs non-arm) — it's a UI
-    // concept, not a deformation-time concept. Route via armness >= 0.5.
-    const ov = blendedSegmentOverride(oy, overrides, armness >= 0.5);
+    // Segment overrides: blend the body and arm pools continuously by
+    // armness — a hard >=0.5 switch left deltoid-cap vertices reachable
+    // only through the arm sliders and produced a seam at the boundary.
+    const ovBody = blendedSegmentOverride(oy, overrides, false);
+    const ovArm = blendedSegmentOverride(oy, overrides, true);
+    const ov = mix(ovBody, ovArm, armness);
     const baseScale = Math.max(
       MIN_SCALE,
       Math.min(MAX_SCALE, (1 + (deltaBodyFat * sens) / 100) * (1 + ov / 100)),

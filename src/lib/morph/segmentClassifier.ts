@@ -6,6 +6,18 @@ import type { ArmReferencePoints } from '@/lib/pipeline/landmarkGrouper';
 const TRANSITION_ZONE = 0.02;
 
 /**
+ * Half-width of the armness seed's x-blend band, as a fraction of body
+ * height (~26mm on a 1750mm scan). Matches the engine's ARM_BAND.
+ */
+const ARMNESS_SEED_BAND_FRACTION = 0.015;
+
+function smoothstep01(edge0: number, edge1: number, x: number): number {
+  if (edge1 === edge0) return x < edge0 ? 0 : 1;
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
  * Anatomical upper-arm : forearm length ratio fallback.
  * Only used if ElbowLeft/ElbowRight landmarks are missing from a scan.
  * (~56% upper arm, ~44% forearm measured wrist→shoulder.)
@@ -62,6 +74,16 @@ export interface LateralEnvelope {
   extents: number[];
   /** Scalar fallback when no rings are available. */
   fallback: number;
+  /**
+   * Lower bound on the returned extent (the Bust half-width). Without it,
+   * the envelope dips toward the narrow Collar ring across the upper chest
+   * and toward the waist rings beside the hanging arms — the arm/body flip
+   * surface then intersects the chest and inner-arm surfaces, tearing
+   * horizontal bands into them. The chest can never be narrower than the
+   * bust, so flooring there is safe; the hips fix is unaffected because
+   * hip extents exceed the bust width.
+   */
+  floor: number;
 }
 
 /**
@@ -75,6 +97,7 @@ export function computeLateralEnvelope(
 ): LateralEnvelope {
   const heights: number[] = [];
   const extents: number[] = [];
+  let floor = 0;
   for (const ring of rings) {
     if (ENVELOPE_EXCLUDED_RINGS.has(ring.name)) continue;
     const extent = Math.max(
@@ -84,8 +107,9 @@ export function computeLateralEnvelope(
     if (!(extent > 0)) continue;
     heights.push(ring.height);
     extents.push(extent);
+    if (ring.name === 'Bust') floor = extent;
   }
-  return { heights, extents, fallback };
+  return { heights, extents, fallback, floor };
 }
 
 /**
@@ -93,21 +117,68 @@ export function computeLateralEnvelope(
  * and clamped to the nearest ring beyond the ends. Leg rings are per-leg,
  * so left and right rings at the same height both resolve to the outer
  * silhouette — the max of the pair wins via the per-ring extent above.
+ * Never returns less than the bust-width floor (see LateralEnvelope.floor).
  */
 export function envelopeExtentAt(env: LateralEnvelope, y: number): number {
   const n = env.heights.length;
   if (n === 0) return env.fallback;
-  if (y >= env.heights[0]) return env.extents[0];
-  if (y <= env.heights[n - 1]) return env.extents[n - 1];
-  for (let i = 0; i < n - 1; i++) {
-    const hi = env.heights[i];
-    const lo = env.heights[i + 1];
-    if (y <= hi && y >= lo) {
-      const t = hi > lo ? (y - lo) / (hi - lo) : 0;
-      return env.extents[i + 1] + t * (env.extents[i] - env.extents[i + 1]);
+  let extent: number;
+  if (y >= env.heights[0]) {
+    extent = env.extents[0];
+  } else if (y <= env.heights[n - 1]) {
+    extent = env.extents[n - 1];
+  } else {
+    extent = env.fallback;
+    for (let i = 0; i < n - 1; i++) {
+      const hi = env.heights[i];
+      const lo = env.heights[i + 1];
+      if (y <= hi && y >= lo) {
+        const t = hi > lo ? (y - lo) / (hi - lo) : 0;
+        extent = env.extents[i + 1] + t * (env.extents[i] - env.extents[i + 1]);
+        break;
+      }
     }
   }
-  return env.fallback;
+  return Math.max(extent, env.floor);
+}
+
+/**
+ * Diffuse the per-vertex armness seed over the mesh adjacency graph.
+ * Smoothing follows the actual surface, so the arm/torso transition
+ * spreads gradually across the armpit where the regions genuinely meet,
+ * and any residual sharp flip lines from the x-threshold seed dissolve.
+ * Mutates bindings[i].armness in place. Runs once at scan load.
+ */
+export function smoothArmnessField(
+  bindings: VertexBinding[],
+  adjacency: Uint32Array[],
+  iterations: number = 10,
+): void {
+  const n = bindings.length;
+  if (!adjacency || adjacency.length !== n) return;
+  let cur = new Float32Array(n);
+  let next = new Float32Array(n);
+  for (let i = 0; i < n; i++) cur[i] = bindings[i]?.armness ?? 0;
+
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let i = 0; i < n; i++) {
+      const neighbors = adjacency[i];
+      if (!neighbors || neighbors.length === 0) {
+        next[i] = cur[i];
+        continue;
+      }
+      let sum = 0;
+      for (let j = 0; j < neighbors.length; j++) sum += cur[neighbors[j]];
+      next[i] = 0.5 * cur[i] + (0.5 * sum) / neighbors.length;
+    }
+    const tmp = cur;
+    cur = next;
+    next = tmp;
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (bindings[i]) bindings[i].armness = cur[i];
+  }
 }
 
 /** Determine which non-lateral segment owns a given normalized-Y height. */
@@ -288,6 +359,8 @@ export function classifyVertices(
     );
   }
 
+  const armnessSeedBand = ARMNESS_SEED_BAND_FRACTION * bodyHeight;
+
   // ─── Pass 2: classify every vertex ───
   for (let i = 0; i < vertexCount; i++) {
     const x = positions[i * 3];
@@ -296,6 +369,15 @@ export function classifyVertices(
 
     const ny = normalizeY(y);
     const armSide = armSideOf[i];
+
+    // Continuous armness seed (0 = body, 1 = arm), smoothed over the mesh
+    // graph afterwards by smoothArmnessField. Feet stay body.
+    const xDistI = Math.abs(x - centerX);
+    const armEdgeI = envelopeExtentAt(envelope, y) * ENVELOPE_ARM_MARGIN;
+    const armnessSeed =
+      y > ankleHeight
+        ? smoothstep01(armEdgeI - armnessSeedBand, armEdgeI + armnessSeedBand, xDistI)
+        : 0;
     let segmentId: SegmentId;
     let armSideLabel: 'left' | 'right' | undefined;
 
@@ -350,6 +432,7 @@ export function classifyVertices(
     bindings[i] = {
       segmentId,
       armSide: armSideLabel,
+      armness: armnessSeed,
       ringAboveIdx: aboveIdx,
       ringBelowIdx: belowIdx,
       ringWeight: weight,

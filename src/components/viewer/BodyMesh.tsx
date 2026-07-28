@@ -7,6 +7,7 @@ import { useMorphStore } from '@/lib/stores/morphStore';
 import { useViewStore } from '@/lib/stores/viewStore';
 import { useGenderStore } from '@/lib/stores/genderStore';
 import { deformMesh } from '@/lib/morph/morphEngine';
+import { computeAndroidness } from '@/lib/morph/sensitivityModel';
 import type { Mesh, Intersection } from 'three';
 import { Color, BufferAttribute } from 'three';
 
@@ -63,7 +64,8 @@ export default function BodyMesh() {
       segmentOverrides,
       scanData.adjacency,
       gender,
-      scanData.armThreshold
+      scanData.armThreshold,
+      computeAndroidness(gender, scanData.bodyComp?.waistToHipRatio)
     );
 
     positions.needsUpdate = true;

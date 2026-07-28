@@ -37,6 +37,11 @@ export interface VertexBinding {
   segmentId: SegmentId;
   /** For arm vertices, which side of the body the vertex belongs to. */
   armSide?: 'left' | 'right';
+  /**
+   * Continuous arm weight (0 = body, 1 = arm), seeded from the lateral
+   * envelope and diffused over the mesh graph at load time.
+   */
+  armness?: number;
   ringAboveIdx: number;
   ringBelowIdx: number;
   /** 0 = at ringBelow, 1 = at ringAbove */

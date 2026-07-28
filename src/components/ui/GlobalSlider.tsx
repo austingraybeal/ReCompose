@@ -2,6 +2,8 @@
 
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useGenderStore } from '@/lib/stores/genderStore';
+import { useScanStore } from '@/lib/stores/scanStore';
+import { computeAndroidness } from '@/lib/morph/sensitivityModel';
 import { impliedBodyFatDelta } from '@/lib/morph/metricProjection';
 import { motion } from 'framer-motion';
 
@@ -20,6 +22,7 @@ export default function GlobalSlider() {
   const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
   const linkMode = useMorphStore((s) => s.linkMode);
   const sex = useGenderStore((s) => s.gender);
+  const bodyComp = useScanStore((s) => s.scanData?.bodyComp);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalBodyFat(parseFloat(e.target.value));
@@ -27,7 +30,12 @@ export default function GlobalSlider() {
 
   const displayBodyFat =
     linkMode === 'proportional'
-      ? Math.max(1, globalBodyFat + impliedBodyFatDelta(segmentOverrides, sex))
+      ? Math.max(1, globalBodyFat +
+          impliedBodyFatDelta(
+            segmentOverrides,
+            sex,
+            computeAndroidness(sex, bodyComp?.waistToHipRatio),
+          ))
       : globalBodyFat;
 
   const actualPosition = ((originalBodyFat - 5) / (55 - 5)) * 100;

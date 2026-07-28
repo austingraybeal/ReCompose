@@ -66,23 +66,23 @@ const RING_SENSITIVITY_NEUTRAL: RingSensitivityTable = Object.freeze({
 
   UpperLeftThigh: 0.80,
   UpperRightThigh: 0.80,
-  MidLeftThigh: 0.50,
-  MidRightThigh: 0.50,
-  ActualMidLeftThigh: 0.50,
-  ActualMidRightThigh: 0.50,
-  KneeLeftLeg: 0.15,
-  KneeRightLeg: 0.15,
-  ActualKneeLeftLeg: 0.15,
-  ActualKneeRightLeg: 0.15,
+  MidLeftThigh: 0.65,
+  MidRightThigh: 0.65,
+  ActualMidLeftThigh: 0.65,
+  ActualMidRightThigh: 0.65,
+  KneeLeftLeg: 0.22,
+  KneeRightLeg: 0.22,
+  ActualKneeLeftLeg: 0.22,
+  ActualKneeRightLeg: 0.22,
 
-  UnderKneeLeftLeg: 0.20,
-  UnderKneeRightLeg: 0.20,
-  CalfLeftLeg: 0.35,
-  CalfRightLeg: 0.35,
-  AnkleLeftLeg: 0.08,
-  AnkleRightLeg: 0.08,
-  ActualAnkleLeftLeg: 0.08,
-  ActualAnkleRightLeg: 0.08,
+  UnderKneeLeftLeg: 0.28,
+  UnderKneeRightLeg: 0.28,
+  CalfLeftLeg: 0.44,
+  CalfRightLeg: 0.44,
+  AnkleLeftLeg: 0.10,
+  AnkleRightLeg: 0.10,
+  ActualAnkleLeftLeg: 0.10,
+  ActualAnkleRightLeg: 0.10,
 });
 
 const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
@@ -112,23 +112,23 @@ const RING_SENSITIVITY_FEMALE: RingSensitivityTable = Object.freeze({
 
   UpperLeftThigh: 1.00,
   UpperRightThigh: 1.00,
-  MidLeftThigh: 0.60,
-  MidRightThigh: 0.60,
-  ActualMidLeftThigh: 0.60,
-  ActualMidRightThigh: 0.60,
-  KneeLeftLeg: 0.15,
-  KneeRightLeg: 0.15,
-  ActualKneeLeftLeg: 0.15,
-  ActualKneeRightLeg: 0.15,
+  MidLeftThigh: 0.78,
+  MidRightThigh: 0.78,
+  ActualMidLeftThigh: 0.78,
+  ActualMidRightThigh: 0.78,
+  KneeLeftLeg: 0.24,
+  KneeRightLeg: 0.24,
+  ActualKneeLeftLeg: 0.24,
+  ActualKneeRightLeg: 0.24,
 
-  UnderKneeLeftLeg: 0.22,
-  UnderKneeRightLeg: 0.22,
-  CalfLeftLeg: 0.38,
-  CalfRightLeg: 0.38,
-  AnkleLeftLeg: 0.10,
-  AnkleRightLeg: 0.10,
-  ActualAnkleLeftLeg: 0.10,
-  ActualAnkleRightLeg: 0.10,
+  UnderKneeLeftLeg: 0.30,
+  UnderKneeRightLeg: 0.30,
+  CalfLeftLeg: 0.48,
+  CalfRightLeg: 0.48,
+  AnkleLeftLeg: 0.12,
+  AnkleRightLeg: 0.12,
+  ActualAnkleLeftLeg: 0.12,
+  ActualAnkleRightLeg: 0.12,
 });
 
 const RING_SENSITIVITY_MALE: RingSensitivityTable = Object.freeze({
@@ -158,23 +158,23 @@ const RING_SENSITIVITY_MALE: RingSensitivityTable = Object.freeze({
 
   UpperLeftThigh: 0.68,
   UpperRightThigh: 0.68,
-  MidLeftThigh: 0.40,
-  MidRightThigh: 0.40,
-  ActualMidLeftThigh: 0.40,
-  ActualMidRightThigh: 0.40,
-  KneeLeftLeg: 0.14,
-  KneeRightLeg: 0.14,
-  ActualKneeLeftLeg: 0.14,
-  ActualKneeRightLeg: 0.14,
+  MidLeftThigh: 0.52,
+  MidRightThigh: 0.52,
+  ActualMidLeftThigh: 0.52,
+  ActualMidRightThigh: 0.52,
+  KneeLeftLeg: 0.20,
+  KneeRightLeg: 0.20,
+  ActualKneeLeftLeg: 0.20,
+  ActualKneeRightLeg: 0.20,
 
-  UnderKneeLeftLeg: 0.19,
-  UnderKneeRightLeg: 0.19,
-  CalfLeftLeg: 0.32,
-  CalfRightLeg: 0.32,
-  AnkleLeftLeg: 0.07,
-  AnkleRightLeg: 0.07,
-  ActualAnkleLeftLeg: 0.07,
-  ActualAnkleRightLeg: 0.07,
+  UnderKneeLeftLeg: 0.26,
+  UnderKneeRightLeg: 0.26,
+  CalfLeftLeg: 0.40,
+  CalfRightLeg: 0.40,
+  AnkleLeftLeg: 0.09,
+  AnkleRightLeg: 0.09,
+  ActualAnkleLeftLeg: 0.09,
+  ActualAnkleRightLeg: 0.09,
 });
 
 const RING_TABLES: Readonly<Record<Sex, RingSensitivityTable>> = Object.freeze({
@@ -198,30 +198,91 @@ const ARM_SENSITIVITY_TABLE: Readonly<
   male: Object.freeze({ upper_arm: 0.39, forearm: 0.16 }),
 });
 
-/** Look up radial sensitivity for a ring name given current sex. */
-export function getRingSensitivity(ringName: string, sex: Sex): number {
-  return (RING_TABLES[sex][ringName] ?? 0) * SENSITIVITY_GAIN;
+// ─── WHR-relative personalization ──────────────────────────────────────────
+//
+// The pure sex tables force an archetype: every female gets strong gynoid
+// hip/thigh response even when her own measured waist-to-hip ratio says her
+// fat distribution is more android. Androidness expresses where a person
+// sits on the gynoid(0) ↔ android(1) axis; sensitivity lookups lerp between
+// the female and male tables at that point. The declared sex anchors half
+// the weight, the measured WHR the other half, so a female with WHR 0.83
+// gets meaningfully less hip response and more waist response than the
+// pure female table, without flipping her to the male curve.
+
+/** Typical WHR anchors for fully gynoid / fully android distributions. */
+const WHR_GYNOID = 0.72;
+const WHR_ANDROID = 0.95;
+
+/**
+ * Androidness in [0,1] from declared sex + measured waist-to-hip ratio.
+ * Pass undefined WHR (or <= 0) to fall back to the sex archetype alone.
+ */
+export function computeAndroidness(sex: Sex, whr?: number): number {
+  const prior = sex === 'male' ? 1 : sex === 'female' ? 0 : 0.5;
+  if (whr === undefined || !(whr > 0)) return prior;
+  const measured = Math.min(
+    1,
+    Math.max(0, (whr - WHR_GYNOID) / (WHR_ANDROID - WHR_GYNOID)),
+  );
+  return 0.5 * prior + 0.5 * measured;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/**
+ * Look up radial sensitivity for a ring name.
+ * With `androidness` provided, lerps female↔male tables at that point;
+ * otherwise uses the declared-sex table as-is (legacy behavior).
+ */
+export function getRingSensitivity(
+  ringName: string,
+  sex: Sex,
+  androidness?: number,
+): number {
+  if (androidness === undefined) {
+    return (RING_TABLES[sex][ringName] ?? 0) * SENSITIVITY_GAIN;
+  }
+  const f = RING_SENSITIVITY_FEMALE[ringName] ?? 0;
+  const m = RING_SENSITIVITY_MALE[ringName] ?? 0;
+  return lerp(f, m, androidness) * SENSITIVITY_GAIN;
 }
 
 /** Look up sensitivity for an arm sub-segment (upper_arm or forearm). */
 export function getArmSensitivity(
   subSegment: 'upper_arm' | 'forearm',
   sex: Sex,
+  androidness?: number,
 ): number {
-  return ARM_SENSITIVITY_TABLE[sex][subSegment] * SENSITIVITY_GAIN;
+  if (androidness === undefined) {
+    return ARM_SENSITIVITY_TABLE[sex][subSegment] * SENSITIVITY_GAIN;
+  }
+  const f = ARM_SENSITIVITY_TABLE.female[subSegment];
+  const m = ARM_SENSITIVITY_TABLE.male[subSegment];
+  return lerp(f, m, androidness) * SENSITIVITY_GAIN;
 }
 
 /**
- * Segment-level mean sensitivity. Used by the proportional/linked slider mode
- * to derive an implied global-BF delta from a single-segment change.
+ * Segment-level mean sensitivity. Used by the linked-mode total readout to
+ * convert segment overrides into an implied global-BF contribution.
  */
-export function getSegmentMeanSensitivity(segment: SegmentId, sex: Sex): number {
-  const tables = {
-    neutral: SEGMENT_MEAN_SENSITIVITY_UNISEX,
-    female: SEGMENT_MEAN_SENSITIVITY_FEMALE,
-    male: SEGMENT_MEAN_SENSITIVITY_MALE,
-  } as const;
-  return tables[sex][segment] * SENSITIVITY_GAIN;
+export function getSegmentMeanSensitivity(
+  segment: SegmentId,
+  sex: Sex,
+  androidness?: number,
+): number {
+  if (androidness === undefined) {
+    const tables = {
+      neutral: SEGMENT_MEAN_SENSITIVITY_UNISEX,
+      female: SEGMENT_MEAN_SENSITIVITY_FEMALE,
+      male: SEGMENT_MEAN_SENSITIVITY_MALE,
+    } as const;
+    return tables[sex][segment] * SENSITIVITY_GAIN;
+  }
+  const f = SEGMENT_MEAN_SENSITIVITY_FEMALE[segment];
+  const m = SEGMENT_MEAN_SENSITIVITY_MALE[segment];
+  return lerp(f, m, androidness) * SENSITIVITY_GAIN;
 }
 
 // ─── Backwards-compatible exports ──────────────────────────────────────────

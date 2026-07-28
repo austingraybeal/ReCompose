@@ -9,7 +9,11 @@ import {
   groupLandmarksIntoRings,
   extractArmReferencePoints,
 } from '@/lib/pipeline/landmarkGrouper';
-import { classifyVertices, computeArmThreshold } from '@/lib/morph/segmentClassifier';
+import {
+  classifyVertices,
+  computeArmThreshold,
+  smoothArmnessField,
+} from '@/lib/morph/segmentClassifier';
 import { validateOBJContent, validateCoreMeasuresCSV, validateBodyCompCSV } from '@/lib/pipeline/validator';
 import type { ScanData, LandmarkRing } from '@/types/scan';
 
@@ -144,6 +148,10 @@ export function useScanLoader() {
 
       // Build mesh adjacency for Laplacian smoothing
       const adjacency = buildAdjacency(geometry);
+
+      // Diffuse the armness seed over the mesh surface so the arm/torso
+      // transition is smooth everywhere (no x-threshold flip lines).
+      smoothArmnessField(vertexBindings, adjacency);
 
       const scanData: ScanData = {
         geometry,

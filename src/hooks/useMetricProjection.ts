@@ -5,6 +5,7 @@ import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useGenderStore } from '@/lib/stores/genderStore';
 import { projectMetrics } from '@/lib/morph/metricProjection';
+import { computeAndroidness } from '@/lib/morph/sensitivityModel';
 import type { ProjectedMetrics, SegmentOverrides } from '@/types/scan';
 import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
 
@@ -37,6 +38,7 @@ export function useMetricProjection(): {
       scanData.rings,
       scanData.measures,
       sex,
+      computeAndroidness(sex, scanData.bodyComp?.waistToHipRatio),
     );
   }, [scanData, originalBodyFat, globalBodyFat, segmentOverrides, sex]);
 
@@ -50,6 +52,7 @@ export function useMetricProjection(): {
       scanData.rings,
       scanData.measures,
       sex,
+      computeAndroidness(sex, scanData.bodyComp?.waistToHipRatio),
     );
   }, [scanData, originalBodyFat, sex]);
 

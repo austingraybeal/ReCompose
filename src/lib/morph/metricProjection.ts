@@ -30,13 +30,17 @@ const MIN_CIRC_FRACTION = 0.5;
  *   Σ(r_s * V_s) / Σ(V_t * sens_t)
  * Bounded by construction: all sliders at ±25 imply roughly ±7 BF points.
  */
-export function impliedBodyFatDelta(overrides: SegmentOverrides, sex: Sex): number {
+export function impliedBodyFatDelta(
+  overrides: SegmentOverrides,
+  sex: Sex,
+  androidness?: number,
+): number {
   let numerator = 0;
   let denominator = 0;
   for (const seg of SEGMENT_ORDER) {
     const share = SEGMENT_VOLUME_SHARE[seg];
     numerator += (overrides[seg] ?? 0) * SEGMENT_OVERRIDE_STRENGTH * share;
-    denominator += share * getSegmentMeanSensitivity(seg, sex);
+    denominator += share * getSegmentMeanSensitivity(seg, sex, androidness);
   }
   return denominator > 0 ? numerator / denominator : 0;
 }
@@ -68,6 +72,7 @@ export function projectMetrics(
   rings: LandmarkRing[],
   measures: Record<string, number>,
   sex: Sex = 'neutral',
+  androidness?: number,
 ): ProjectedMetrics {
   const deltaBF = currentBF - originalBF;
 
@@ -105,36 +110,36 @@ export function projectMetrics(
   const originalWaist =
     measures['WaistCircumference'] ?? measures['Waist'] ?? bodyComp['Waist'] ?? 80;
   const estimatedWaist = projectCircumference(
-    originalWaist, deltaBF, getRingSensitivity('Waist', sex), overrides.waist);
+    originalWaist, deltaBF, getRingSensitivity('Waist', sex, androidness), overrides.waist);
 
   const originalHip =
     measures['HipCircumference'] ?? measures['Hip'] ?? bodyComp['Hip'] ?? 95;
   const estimatedHip = projectCircumference(
-    originalHip, deltaBF, getRingSensitivity('Hip', sex), overrides.hips);
+    originalHip, deltaBF, getRingSensitivity('Hip', sex, androidness), overrides.hips);
 
   const originalChest = measures['ChestCircumference'] ?? 0;
   const estimatedChest = projectCircumference(
-    originalChest, deltaBF, getRingSensitivity('Bust', sex), overrides.torso);
+    originalChest, deltaBF, getRingSensitivity('Bust', sex, androidness), overrides.torso);
 
   const originalBicep =
     measures['BicepCircumferenceRight'] ?? measures['BicepCircumferenceLeft'] ?? 0;
   const estimatedBicep = projectCircumference(
-    originalBicep, deltaBF, getArmSensitivity('upper_arm', sex), overrides.upper_arms);
+    originalBicep, deltaBF, getArmSensitivity('upper_arm', sex, androidness), overrides.upper_arms);
 
   const originalForearm =
     measures['ForearmCircumferenceRight'] ?? measures['ForearmCircumferenceLeft'] ?? 0;
   const estimatedForearm = projectCircumference(
-    originalForearm, deltaBF, getArmSensitivity('forearm', sex), overrides.forearms);
+    originalForearm, deltaBF, getArmSensitivity('forearm', sex, androidness), overrides.forearms);
 
   const originalThigh =
     measures['ThighCircumferenceRight'] ?? measures['ThighCircumferenceLeft'] ?? 0;
   const estimatedThigh = projectCircumference(
-    originalThigh, deltaBF, getRingSensitivity('UpperRightThigh', sex), overrides.thighs);
+    originalThigh, deltaBF, getRingSensitivity('UpperRightThigh', sex, androidness), overrides.thighs);
 
   const originalCalf =
     measures['CalfCircumferenceRight'] ?? measures['CalfCircumferenceLeft'] ?? 0;
   const estimatedCalf = projectCircumference(
-    originalCalf, deltaBF, getRingSensitivity('CalfRightLeg', sex), overrides.calves);
+    originalCalf, deltaBF, getRingSensitivity('CalfRightLeg', sex, androidness), overrides.calves);
 
   const estimatedWHR = estimatedHip > 0 ? estimatedWaist / estimatedHip : 0;
 
