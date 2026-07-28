@@ -14,6 +14,7 @@ const ELBOW_Y_FRACTION_FALLBACK = 0.44;
 
 /**
  * Compute torso half-width threshold for arm detection from the Bust ring.
+ * Retained as the fallback when a scan has no usable ring envelope.
  */
 export function computeArmThreshold(rings: LandmarkRing[]): number {
   const bustRing = rings.find((r) => r.name === 'Bust');
@@ -23,6 +24,90 @@ export function computeArmThreshold(rings: LandmarkRing[]): number {
     return ((torsoRing.radius.left + torsoRing.radius.right) / 2) * 1.05;
   }
   return ((bustRing.radius.left + bustRing.radius.right) / 2) * 1.05;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Y-aware lateral body envelope
+//
+// A single bust-derived x-threshold misclassifies wide hips/thighs as
+// arm: on gynoid bodies the widest hip point sits laterally beyond the
+// bust half-width, so lateral hip/thigh vertices land in the arm bucket
+// — arm sliders then move the hips, and the morph engine tears the
+// lateral thigh surface. The envelope instead tracks the body's actual
+// silhouette half-width at every height, interpolated from the ring
+// cardinals, so "arm" means "laterally beyond the body surface at this
+// height" everywhere on the body.
+// ════════════════════════════════════════════════════════════════
+
+/** Margin applied to the envelope before a vertex counts as arm. */
+export const ENVELOPE_ARM_MARGIN = 1.15;
+
+/**
+ * Rings excluded from the envelope: arm-only rings would inflate it at
+ * arm heights, and OverArm is an arm-inclusive circumference rather than
+ * a body-silhouette ring.
+ */
+const ENVELOPE_EXCLUDED_RINGS: ReadonlySet<string> = new Set([
+  'ElbowLeftArm',
+  'ElbowRightArm',
+  'WristLeftArm',
+  'WristRightArm',
+  'OverArm',
+]);
+
+export interface LateralEnvelope {
+  /** Ring heights, sorted descending (same units as the source rings). */
+  heights: number[];
+  /** Lateral half-width from the body axis at each height. */
+  extents: number[];
+  /** Scalar fallback when no rings are available. */
+  fallback: number;
+}
+
+/**
+ * Build the lateral envelope from ring cardinals. Works in any unit
+ * (raw mm or normalized unit-height) as long as rings and axisCX agree.
+ */
+export function computeLateralEnvelope(
+  rings: readonly LandmarkRing[],
+  axisCX: number,
+  fallback: number,
+): LateralEnvelope {
+  const heights: number[] = [];
+  const extents: number[] = [];
+  for (const ring of rings) {
+    if (ENVELOPE_EXCLUDED_RINGS.has(ring.name)) continue;
+    const extent = Math.max(
+      Math.abs(ring.left.x - axisCX),
+      Math.abs(ring.right.x - axisCX),
+    );
+    if (!(extent > 0)) continue;
+    heights.push(ring.height);
+    extents.push(extent);
+  }
+  return { heights, extents, fallback };
+}
+
+/**
+ * Body half-width at a given height, linearly interpolated between rings
+ * and clamped to the nearest ring beyond the ends. Leg rings are per-leg,
+ * so left and right rings at the same height both resolve to the outer
+ * silhouette — the max of the pair wins via the per-ring extent above.
+ */
+export function envelopeExtentAt(env: LateralEnvelope, y: number): number {
+  const n = env.heights.length;
+  if (n === 0) return env.fallback;
+  if (y >= env.heights[0]) return env.extents[0];
+  if (y <= env.heights[n - 1]) return env.extents[n - 1];
+  for (let i = 0; i < n - 1; i++) {
+    const hi = env.heights[i];
+    const lo = env.heights[i + 1];
+    if (y <= hi && y >= lo) {
+      const t = hi > lo ? (y - lo) / (hi - lo) : 0;
+      return env.extents[i + 1] + t * (env.extents[i] - env.extents[i + 1]);
+    }
+  }
+  return env.fallback;
 }
 
 /** Determine which non-lateral segment owns a given normalized-Y height. */
@@ -152,6 +237,11 @@ export function classifyVertices(
   const bodyHeight = maxY - minY;
   const normalizeY = bodyHeight > 0 ? (y: number) => (y - minY) / bodyHeight : () => 0;
 
+  // Y-aware silhouette envelope: a vertex is an arm candidate only when it
+  // sits laterally beyond the body surface AT ITS OWN HEIGHT, not beyond a
+  // single bust-derived width (which misclassified wide hips/thighs as arm).
+  const envelope = computeLateralEnvelope(rings, centerX, armThreshold);
+
   // ─── Pass 1: detect arm-candidate vertices + their per-side Y range ───
   // Per-side Y range is only used if real elbow landmarks are missing.
   const armSideOf = new Int8Array(vertexCount); // 0 = not arm, 1 = left (body-left, x > centerX), -1 = right
@@ -164,7 +254,8 @@ export function classifyVertices(
     const x = positions[i * 3];
     const y = positions[i * 3 + 1];
     const xDist = Math.abs(x - centerX);
-    if (xDist > armThreshold && y > ankleHeight) {
+    const armEdge = envelopeExtentAt(envelope, y) * ENVELOPE_ARM_MARGIN;
+    if (xDist > armEdge && y > ankleHeight) {
       if (x > centerX) {
         armSideOf[i] = 1;
         if (y < leftLoY) leftLoY = y;

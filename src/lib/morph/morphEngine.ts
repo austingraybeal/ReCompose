@@ -2,6 +2,11 @@ import type { LandmarkRing, VertexBinding, SegmentOverrides, SegmentId } from '@
 import type { BodyGender } from '@/lib/stores/genderStore';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 import { getArmSensitivity, getRingSensitivity, type Sex } from './sensitivityModel';
+import {
+  computeLateralEnvelope,
+  envelopeExtentAt,
+  ENVELOPE_ARM_MARGIN,
+} from './segmentClassifier';
 
 // ════════════════════════════════════════════════════════════════
 // Constants
@@ -42,12 +47,14 @@ const ARM_JUNCTION_HIGH = 0.70;
 
 /**
  * Smooth-blend band half-widths (unit-height space).
- *  - ARM_BAND:  arm vs torso x-distance softening (~40mm on a 1750mm scan).
+ *  - ARM_BAND:  arm vs torso x-distance softening (~26mm on a 1750mm scan).
+ *    Tight, because the Y-aware envelope threshold is accurate per height;
+ *    a wide band here would leak arm treatment onto lateral hips/thighs.
  *  - ELBOW_BAND: upper-arm vs forearm Y softening (~85mm). Wide enough that
  *    the upper-arm ↔ forearm sensitivity step doesn't show as a kink at
  *    high SENSITIVITY_GAIN.
  */
-const ARM_BAND = 0.025;
+const ARM_BAND = 0.015;
 const ELBOW_BAND = 0.05;
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -346,19 +353,21 @@ export function deformMesh(
   const upperArmSens = getArmSensitivity('upper_arm', sex);
   const forearmSens = getArmSensitivity('forearm', sex);
 
-  // Arm/torso soft boundary. armThreshold is in unit-height space. Fall back
-  // to Bust-ring-based estimate if the caller didn't supply one.
-  let effectiveArmThreshold = armThreshold;
-  if (effectiveArmThreshold === undefined || effectiveArmThreshold <= 0) {
+  // Arm/torso soft boundary — Y-aware silhouette envelope. A vertex reads
+  // as arm only when it sits laterally beyond the body surface at its own
+  // height, so wide hips/thighs can never fall into the arm treatment
+  // (which previously tore the lateral thigh surface and coupled the
+  // forearm slider to the hips). Scalar fallback for ring-less scans.
+  let fallbackArmThreshold = armThreshold;
+  if (fallbackArmThreshold === undefined || fallbackArmThreshold <= 0) {
     const bust = rings.find((r) => r.name === 'Bust');
     if (bust) {
-      effectiveArmThreshold = ((bust.radius.left + bust.radius.right) / 2) * 1.05;
+      fallbackArmThreshold = ((bust.radius.left + bust.radius.right) / 2) * 1.05;
     } else {
-      effectiveArmThreshold = 0.08; // sane default in unit-height space
+      fallbackArmThreshold = 0.08; // sane default in unit-height space
     }
   }
-  const armEdge0 = effectiveArmThreshold - ARM_BAND;
-  const armEdge1 = effectiveArmThreshold + ARM_BAND;
+  const envelope = computeLateralEnvelope(rings, axisCX, fallbackArmThreshold);
 
   // Elbow Y for upper-arm ↔ forearm smoothing. Use per-side ring height when
   // present; fall back to whichever is available; else a mid-arm default.
@@ -385,7 +394,8 @@ export function deformMesh(
 
     // ─── Continuous arm-ness / upper-arm-ness weights ───
     const xDist = Math.abs(ox - axisCX);
-    const armness = smoothstep(armEdge0, armEdge1, xDist);
+    const armEdge = envelopeExtentAt(envelope, oy) * ENVELOPE_ARM_MARGIN;
+    const armness = smoothstep(armEdge - ARM_BAND, armEdge + ARM_BAND, xDist);
     // Body-left arm vs body-right arm: engine convention uses ox < axisCX as
     // one bucket (matches computeArmCenters). Pick the matching elbow Y.
     const isNegativeX = ox < axisCX;
