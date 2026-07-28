@@ -199,9 +199,9 @@ const RING_TABLES: Readonly<Record<Sex, RingSensitivityTable>> = Object.freeze({
 const ARM_SENSITIVITY_TABLE: Readonly<
   Record<Sex, { upper_arm: number; forearm: number }>
 > = Object.freeze({
-  neutral: Object.freeze({ upper_arm: 0.51, forearm: 0.21 }),
-  female: Object.freeze({ upper_arm: 0.48, forearm: 0.20 }),
-  male: Object.freeze({ upper_arm: 0.54, forearm: 0.22 }),
+  neutral: Object.freeze({ upper_arm: 0.61, forearm: 0.27 }),
+  female: Object.freeze({ upper_arm: 0.58, forearm: 0.26 }),
+  male: Object.freeze({ upper_arm: 0.64, forearm: 0.28 }),
 });
 
 // ─── WHR-relative personalization ──────────────────────────────────────────

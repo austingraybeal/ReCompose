@@ -419,6 +419,21 @@ export function deformMesh(
       ? kneeRings.reduce((sum, r) => sum + r.height, 0) / kneeRings.length - 0.03
       : LEG_SPLIT_LOW_DEFAULT;
 
+  // Rigid arm-anchor scale: the torso's scale AT THE ARMPIT, applied as one
+  // constant translation multiplier for the whole arm. Evaluating it per
+  // slice bent the arms — below the elbow the "torso" at that height is the
+  // hips (highest sensitivity), so forearms translated further than upper
+  // arms and the arm curved outward like a noodle.
+  const armAnchorSens = gaussianRingSensitivity(armJunctionHigh, rings, sex, androidness);
+  const armAnchorOv = blendedSegmentOverride(armJunctionHigh, overrides, false);
+  const armAnchorScale = Math.max(
+    MIN_SCALE,
+    Math.min(
+      MAX_SCALE,
+      (1 + (deltaBodyFat * armAnchorSens) / 100) * (1 + armAnchorOv / 100),
+    ),
+  );
+
   // ── Per-vertex deformation ──
   for (let i = 0; i < vertexCount; i++) {
     const binding = bindings[i];
@@ -475,20 +490,16 @@ export function deformMesh(
     const bodyCX = axisCX;
     const bodyCZ = axisCZ;
 
-    // Arms follow the torso silhouette: each arm slice's radial center is
-    // translated by the torso's own scale at this height (parent-bone
-    // behavior). Without this the arm stays planted in space while the
-    // torso shrinks away from it (gap/wings on downscale, separation when
-    // torso and upper-arm overrides diverge) or grows into it. The arm
-    // still thickens/thins about its own moving center via armSens.
-    const bodyScaleAtY = Math.max(
-      MIN_SCALE,
-      Math.min(MAX_SCALE, (1 + (deltaBodyFat * torsoSens) / 100) * (1 + ovBody / 100)),
-    );
+    // Arms follow the torso silhouette: the whole arm translates rigidly by
+    // the torso's scale at the ARMPIT (armAnchorScale). Without this the
+    // arm stays planted in space while the torso shrinks away from it
+    // (gap/wings on downscale, separation when torso and upper-arm
+    // overrides diverge) or grows into it. The arm still thickens/thins
+    // about its own moving center via armSens.
     const rawArmCX = isNegativeX ? arms.leftCX : arms.rightCX;
     const rawArmCZ = isNegativeX ? arms.leftCZ : arms.rightCZ;
-    const anchoredArmCX = axisCX + (rawArmCX - axisCX) * bodyScaleAtY;
-    const anchoredArmCZ = axisCZ + (rawArmCZ - axisCZ) * bodyScaleAtY;
+    const anchoredArmCX = axisCX + (rawArmCX - axisCX) * armAnchorScale;
+    const anchoredArmCZ = axisCZ + (rawArmCZ - axisCZ) * armAnchorScale;
     // Shoulder-junction smoothstep back to the body axis.
     const jb = Math.min(
       1,

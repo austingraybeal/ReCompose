@@ -164,8 +164,16 @@ export function smoothArmnessField(
     next = tmp;
   }
 
+  // Sharpen: commit mid-range values to the dominant side. Scan-bridge
+  // triangles spanning the armpit air gap carry ~0.5 armness and would
+  // otherwise position BETWEEN the torso and arm surfaces, standing off
+  // the chest as tassels/fins whenever the two sides move. A narrowed
+  // smooth band (0.25-0.75) keeps the junction blend but pins gap
+  // geometry to one surface.
   for (let i = 0; i < n; i++) {
-    if (bindings[i]) bindings[i].armness = cur[i];
+    if (!bindings[i]) continue;
+    const t = Math.min(1, Math.max(0, (cur[i] - 0.25) / 0.5));
+    bindings[i].armness = t * t * (3 - 2 * t);
   }
 }
 
