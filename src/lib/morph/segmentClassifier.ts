@@ -140,7 +140,7 @@ export function envelopeExtentAt(env: LateralEnvelope, y: number): number {
 export function smoothArmnessField(
   bindings: VertexBinding[],
   adjacency: Uint32Array[],
-  iterations: number = 10,
+  iterations: number = 24,
 ): void {
   const n = bindings.length;
   if (!adjacency || adjacency.length !== n) return;

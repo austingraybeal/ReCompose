@@ -13,14 +13,14 @@ import {
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Radial scale clamps. MIN_SCALE 0.72 lets high-sensitivity regions
- * (hips/waist at large negative delta-BF) actually differentiate from
- * low-sensitivity regions — the old 0.82 floor flattened hips, thighs
- * and calves to the same shrink at very low BF, reading as uniform
- * tube legs.
+ * Radial scale clamps. MIN_SCALE must sit below the largest shrink any
+ * region requests at the BF floor, or high-sensitivity regions (hips,
+ * waist at -25 delta-BF want ~-40%) all pile onto the clamp and flatten
+ * into the same silhouette — the "no hip curvature at 5%" artifact.
+ * Exported so metric projection obeys the same bounds as the mesh.
  */
-const MIN_SCALE = 0.72;
-const MAX_SCALE = 1.65;
+export const MIN_SCALE = 0.65;
+export const MAX_SCALE = 1.65;
 
 /**
  * Segment-override strength. 1.0 = the slider's face value is the actual

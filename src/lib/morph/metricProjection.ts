@@ -11,7 +11,7 @@ import {
   type Sex,
 } from './sensitivityModel';
 import { SEGMENT_ORDER, SEGMENT_VOLUME_SHARE } from '@/lib/constants/segmentDefs';
-import { SEGMENT_OVERRIDE_STRENGTH } from './morphEngine';
+import { SEGMENT_OVERRIDE_STRENGTH, MIN_SCALE, MAX_SCALE } from './morphEngine';
 
 /**
  * No projected circumference may shrink below this fraction of its original.
@@ -45,7 +45,11 @@ export function impliedBodyFatDelta(
   return denominator > 0 ? numerator / denominator : 0;
 }
 
-/** Project one circumference through the global-BF and regional paths. */
+/**
+ * Project one circumference through the global-BF and regional paths.
+ * Clamped to the same MIN/MAX scale bounds the mesh engine applies, so the
+ * panel never reports a change the avatar isn't actually showing.
+ */
 function projectCircumference(
   original: number,
   deltaBF: number,
@@ -54,7 +58,8 @@ function projectCircumference(
 ): number {
   const globalScale = 1 + (deltaBF * sensitivity) / 100;
   const regionalScale = 1 + (overrideValue * SEGMENT_OVERRIDE_STRENGTH) / 100;
-  return Math.max(original * MIN_CIRC_FRACTION, original * globalScale * regionalScale);
+  const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, globalScale * regionalScale));
+  return Math.max(original * MIN_CIRC_FRACTION, original * scale);
 }
 
 /**
