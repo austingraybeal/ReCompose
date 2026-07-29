@@ -14,6 +14,7 @@ import {
   computeArmThreshold,
   smoothArmnessField,
   markSeamBridges,
+  findArmWebbingVertices,
 } from '@/lib/morph/segmentClassifier';
 import { validateOBJContent, validateCoreMeasuresCSV, validateBodyCompCSV } from '@/lib/pipeline/validator';
 import type { ScanData, LandmarkRing } from '@/types/scan';
@@ -156,6 +157,39 @@ export function useScanLoader() {
 
       // Flag scan-bridge slivers (armpit webbing) for per-frame settling.
       markSeamBridges(vertexBindings, adjacency, originalPositions);
+
+      // Render-only webbing removal: drop armpit-webbing triangles from
+      // the RENDER index. Positions, bindings, and adjacency are built
+      // above from the full mesh, so classification, diffusion, and the
+      // deformation pipeline are bit-identical — the junk just never
+      // draws, leaving the natural arm/torso shadow gap.
+      const webbing = findArmWebbingVertices(
+        vertexBindings,
+        normalizedRings,
+        originalPositions,
+      );
+      if (webbing.size > 0) {
+        const existingIndex = geometry.getIndex();
+        const vertexTotal = geometry.getAttribute('position').count;
+        const kept: number[] = [];
+        if (existingIndex) {
+          const arr = existingIndex.array;
+          for (let t = 0; t + 2 < arr.length; t += 3) {
+            const a = arr[t], b = arr[t + 1], c = arr[t + 2];
+            if (!webbing.has(a) && !webbing.has(b) && !webbing.has(c)) {
+              kept.push(a, b, c);
+            }
+          }
+        } else {
+          // Non-indexed triangle soup: consecutive vertex triples.
+          for (let a = 0; a + 2 < vertexTotal; a += 3) {
+            if (!webbing.has(a) && !webbing.has(a + 1) && !webbing.has(a + 2)) {
+              kept.push(a, a + 1, a + 2);
+            }
+          }
+        }
+        geometry.setIndex(kept);
+      }
 
       const scanData: ScanData = {
         geometry,

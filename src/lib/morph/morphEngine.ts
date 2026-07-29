@@ -6,6 +6,8 @@ import {
   computeLateralEnvelope,
   envelopeExtentAt,
   ENVELOPE_ARM_MARGIN,
+  ARM_RADIUS_NOMINAL,
+  ARM_WEBBING_RADIUS,
 } from './segmentClassifier';
 
 // ════════════════════════════════════════════════════════════════
@@ -85,15 +87,8 @@ const ARM_JUNCTION_HIGH_DEFAULT = 0.70;
 const ARM_BAND = 0.015;
 const ELBOW_BAND = 0.05;
 
-/**
- * Genuine arm surface sits within ARM_RADIUS_NOMINAL of its own axis
- * (~8cm on a 1750mm scan even at high BF); arm-classified geometry beyond
- * ARM_WEBBING_RADIUS (~12cm) is certainly scan webbing / chest-contact
- * skin. Between the two, vertices hand over smoothly from the arm
- * transform to the body transform.
- */
-const ARM_RADIUS_NOMINAL = 0.05;
-const ARM_WEBBING_RADIUS = 0.075;
+// ARM_RADIUS_NOMINAL / ARM_WEBBING_RADIUS are shared with the loader's
+// render-index webbing filter and live in segmentClassifier.ts.
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   if (edge1 === edge0) return x < edge0 ? 0 : 1;

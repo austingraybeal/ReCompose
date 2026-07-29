@@ -239,6 +239,94 @@ export function markSeamBridges(
   return 0;
 }
 
+/**
+ * Genuine arm surface sits within ARM_RADIUS_NOMINAL of its own axis
+ * (~8cm on a 1750mm scan even at high BF); arm-classified geometry beyond
+ * ARM_WEBBING_RADIUS (~12cm) is certainly scan webbing / chest-contact
+ * skin. Shared by the engine (transform demotion) and the loader
+ * (render-index filtering).
+ */
+export const ARM_RADIUS_NOMINAL = 0.05;
+export const ARM_WEBBING_RADIUS = 0.075;
+
+/**
+ * Identify armpit-webbing vertices: arm-classified (armness > 0.3) but
+ * sitting beyond any plausible arm surface's distance from the arm's own
+ * skeleton axis. Used to drop their triangles from the RENDER index only —
+ * positions, bindings, and the deformation pipeline are untouched.
+ * Requires unit-space rings (Bust + per-side Elbow/Wrist arm rings);
+ * returns an empty set when they are missing.
+ */
+export function findArmWebbingVertices(
+  bindings: VertexBinding[],
+  rings: readonly LandmarkRing[],
+  positions: Float32Array,
+): Set<number> {
+  const out = new Set<number>();
+  const n = bindings.length;
+  if (n === 0 || rings.length === 0) return out;
+
+  let axisCX = 0;
+  for (const r of rings) axisCX += r.center.x;
+  axisCX /= rings.length;
+
+  const bust = rings.find((r) => r.name === 'Bust');
+  if (!bust) return out;
+  const sideRing = (names: string[], positive: boolean) =>
+    rings.find(
+      (r) => names.includes(r.name) && (positive ? r.center.x > axisCX : r.center.x <= axisCX),
+    );
+  const buildAxis = (positive: boolean) => {
+    const elbow = sideRing(['ElbowLeftArm', 'ElbowRightArm'], positive);
+    const wrist = sideRing(['WristLeftArm', 'WristRightArm'], positive);
+    if (!elbow || !wrist) return null;
+    const topX = positive === bust.left.x > axisCX ? bust.left : bust.right;
+    return {
+      ys: [bust.height, elbow.height, wrist.height],
+      xs: [topX.x, elbow.center.x, wrist.center.x],
+      zs: [topX.z, elbow.center.z, wrist.center.z],
+    };
+  };
+  const axisPos = buildAxis(true);
+  const axisNeg = buildAxis(false);
+  if (!axisPos || !axisNeg) return out;
+
+  const sample = (ax: NonNullable<typeof axisPos>, y: number) => {
+    const { ys, xs, zs } = ax;
+    if (y >= ys[0]) return { x: xs[0], z: zs[0] };
+    const last = ys.length - 1;
+    if (y <= ys[last]) return { x: xs[last], z: zs[last] };
+    for (let k = 0; k < last; k++) {
+      if (y <= ys[k] && y >= ys[k + 1]) {
+        const t = ys[k] > ys[k + 1] ? (y - ys[k + 1]) / (ys[k] - ys[k + 1]) : 0;
+        return {
+          x: xs[k + 1] + t * (xs[k] - xs[k + 1]),
+          z: zs[k + 1] + t * (zs[k] - zs[k + 1]),
+        };
+      }
+    }
+    return { x: xs[last], z: zs[last] };
+  };
+
+  // Conservative hide threshold: past the midpoint of the demotion band,
+  // so genuine arm surface (<= ARM_RADIUS_NOMINAL) is never touched.
+  const hideR = (ARM_RADIUS_NOMINAL + ARM_WEBBING_RADIUS) / 2 + 0.003;
+  const hideRSq = hideR * hideR;
+  for (let i = 0; i < n; i++) {
+    const a = bindings[i]?.armness ?? 0;
+    if (a <= 0.3) continue;
+    const x = positions[i * 3];
+    const y = positions[i * 3 + 1];
+    const z = positions[i * 3 + 2];
+    const ax = x < axisCX ? axisNeg : axisPos;
+    const pnt = sample(ax, y);
+    const dx = x - pnt.x;
+    const dz = z - pnt.z;
+    if (dx * dx + dz * dz > hideRSq) out.add(i);
+  }
+  return out;
+}
+
 /** Determine which non-lateral segment owns a given normalized-Y height. */
 function getSegmentForHeight(normalizedY: number): SegmentId {
   for (const seg of SEGMENTS) {
