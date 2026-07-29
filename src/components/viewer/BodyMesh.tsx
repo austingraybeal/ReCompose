@@ -9,7 +9,7 @@ import { useGenderStore } from '@/lib/stores/genderStore';
 import { deformMesh } from '@/lib/morph/morphEngine';
 import { computeAndroidness } from '@/lib/morph/sensitivityModel';
 import type { Mesh, Intersection } from 'three';
-import { Color, BufferAttribute } from 'three';
+import { Color, BufferAttribute, Plane, Vector3, DoubleSide } from 'three';
 
 const MESH_COLOR = new Color('#bccad8');
 
@@ -43,6 +43,17 @@ export default function BodyMesh() {
   const clonedGeometry = useMemo(() => {
     if (!scanData) return null;
     return scanData.geometry.clone();
+  }, [scanData]);
+
+  // Render-only decapitation: clip everything above the collar. The head
+  // carries no body-fat information (its sensitivity is ~0) and its fixed
+  // size made every morphed body read strangely. Purely a GPU clipping
+  // plane — the deformation pipeline is untouched.
+  const clipPlanes = useMemo(() => {
+    if (!scanData) return [];
+    const collar = scanData.rings.find((r) => r.name === 'Collar');
+    const neckCutY = (collar?.height ?? 0.86) + 0.01;
+    return [new Plane(new Vector3(0, -1, 0), neckCutY)];
   }, [scanData]);
 
   // Apply morph deformation
@@ -132,12 +143,16 @@ export default function BodyMesh() {
       onPointerOut={handlePointerOut}
       onClick={handleClick}
     >
+      {/* DoubleSide fills the armpit webbing strips (one-sided scan
+          geometry read as holes when their backs faced the camera). */}
       <meshStandardMaterial
         color={MESH_COLOR}
         roughness={0.7}
         metalness={0.05}
         wireframe={wireframe}
         vertexColors={segmentHighlight}
+        side={DoubleSide}
+        clippingPlanes={clipPlanes}
       />
     </mesh>
   );
