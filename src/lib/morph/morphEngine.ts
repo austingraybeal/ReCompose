@@ -138,15 +138,15 @@ function directionalScale(
     bellyBias = g(0.53, 0.07, 0.25) + g(0.48, 0.06, 0.18);
     bustBias = g(0.62, 0.05, 0.28);
     thighBias = g(0.34, 0.06, 0.18);
-    hipLateral = g(0.44, 0.08, 0.30);
-    thighLateral = g(0.33, 0.08, 0.18);
+    hipLateral = g(0.44, 0.08, 0.15);
+    thighLateral = g(0.33, 0.08, 0.14);
     backDamp = g(0.53, 0.10, 0.12);
   } else {
     bellyBias = g(0.53, 0.07, 0.35) + g(0.48, 0.06, 0.25);
     bustBias = g(0.62, 0.05, 0.18);
     thighBias = g(0.34, 0.06, 0.12);
-    hipLateral = g(0.44, 0.08, 0.20);
-    thighLateral = g(0.33, 0.08, 0.12);
+    hipLateral = g(0.44, 0.08, 0.12);
+    thighLateral = g(0.33, 0.08, 0.10);
     backDamp = g(0.53, 0.10, 0.15);
   }
 
@@ -537,6 +537,24 @@ export function deformMesh(
   const silhouetteKneeScale = lateralScaleAt(silhouetteLowY);
   const silhouetteHipScale = lateralScaleAt(silhouetteHighY);
 
+  // S1: leg anchor shift. Each leg's skeleton translates with the pelvis
+  // point it hangs from — the displacement that point gets from the body
+  // transform at crotch height. Without this, growing hips overhang
+  // stationary thighs (the 55% hip/thigh lumps); shrinking hips leave
+  // thighs stranded outboard. Arms already ride the chest the same way.
+  const crotchSens = gaussianRingSensitivity(legSplitHigh, rings, sex, androidness);
+  const crotchOv = blendedSegmentOverride(legSplitHigh, overrides, false);
+  const crotchScale = softClampScale(
+    (1 + (deltaBodyFat * crotchSens) / 100) * (1 + crotchOv / 100),
+  );
+  const legShiftPosX = legAxisPos ? (legAxisPos.xs[0] - axisCX) * (crotchScale - 1) : 0;
+  const legShiftPosZ = legAxisPos ? (legAxisPos.zs[0] - axisCZ) * (crotchScale - 1) : 0;
+  const legShiftNegX = legAxisNeg ? (legAxisNeg.xs[0] - axisCX) * (crotchScale - 1) : 0;
+  const legShiftNegZ = legAxisNeg ? (legAxisNeg.zs[0] - axisCZ) * (crotchScale - 1) : 0;
+
+  // Per-frame soft-settle flags for demoted webbing strips (S4).
+  const frameSettle = new Uint8Array(vertexCount);
+
   // ── Per-vertex deformation ──
   for (let i = 0; i < vertexCount; i++) {
     const binding = bindings[i];
@@ -585,12 +603,15 @@ export function deformMesh(
     // or it stands proud as flaps when the chest moves (harness: 30mm flap
     // growth at -25 BF without this). Smoothly hand it to the body
     // transform as its distance from the arm axis exceeds the plausible
-    // arm radius.
+    // arm radius; strongly-demoted strips also get a soft settle pass so
+    // the stretched triangles between them and the arm tuck into the pit.
     if (armness > 0) {
       const wdx = ox - rawArmCX;
       const wdz = oz - rawArmCZ;
       const dAxis = Math.sqrt(wdx * wdx + wdz * wdz);
-      armness *= 1 - smoothstep(ARM_RADIUS_NOMINAL, ARM_WEBBING_RADIUS, dAxis);
+      const keep = 1 - smoothstep(ARM_RADIUS_NOMINAL, ARM_WEBBING_RADIUS, dAxis);
+      if (armness > 0.3 && keep < 0.4) frameSettle[i] = 1;
+      armness *= keep;
     }
     const elbowY = isNegativeX ? rightElbowY : leftElbowY;
     const upperArmness = smoothstep(elbowY - ELBOW_BAND, elbowY + ELBOW_BAND, oy);
@@ -606,38 +627,29 @@ export function deformMesh(
     const ovBody = blendedSegmentOverride(oy, overrides, false);
     const ovArm = blendedSegmentOverride(oy, overrides, true);
 
-    // BODY transform: pelvis/torso about the body axis; legs about their
-    // own skeleton point (per-leg axis), blending to the pelvis across the
-    // crotch zone. Thickness changes land on the leg instead of
-    // translating it.
-    let bodyCX = axisCX;
-    let bodyCZ = axisCZ;
-    const legBlend = 1 - smoothstep(legSplitHigh, legSplitHigh + 0.06, oy);
-    if (legBlend > 0) {
-      const legAxis = isNegativeX ? legAxisNeg : legAxisPos;
-      if (legAxis) {
-        const lp = sampleArmAxis(legAxis, oy);
-        bodyCX = mix(axisCX, lp.x, legBlend);
-        bodyCZ = mix(axisCZ, lp.z, legBlend);
-      }
-    }
+    // BODY transform, itself two paths blended by POSITION (the same
+    // no-phantom-center rule as the arm/torso junction):
+    //  - pelvis/torso path: radial about the body axis;
+    //  - leg path: radial about this slice's skeleton point on the per-leg
+    //    axis, the whole skeleton translated by the pelvis displacement at
+    //    its attachment (S1) so hips and thighs stay one surface.
     const bodyBase = softClampScale(
       (1 + (deltaBodyFat * torsoSens) / 100) * (1 + ovBody / 100),
     );
-    const bdx = ox - bodyCX;
-    const bdz = oz - bodyCZ;
-    const bDist = Math.sqrt(bdx * bdx + bdz * bdz);
-    let bodyScale = bodyBase;
-    if (bDist > 0.0001) {
-      const zDir = bdz / bDist;
-      const xDir = Math.abs(bdx / bDist);
+    const shapeScale = (cxS: number, czS: number): number => {
+      const ddx = ox - cxS;
+      const ddz = oz - czS;
+      const dd = Math.sqrt(ddx * ddx + ddz * ddz);
+      if (dd <= 0.0001) return bodyBase;
+      const zDir = ddz / dd;
+      const xDir = Math.abs(ddx / dd);
       // Directional (belly-forward / hips-lateral) bias describes where
       // fat ACCUMULATES — on shrink it applies at a fraction of strength
       // (full strength made lateral thighs shrink ~32% faster than their
       // circumference and collapsed the leg taper).
-      bodyScale = directionalScale(oy, zDir, xDir, bodyBase, gender);
+      let sc = directionalScale(oy, zDir, xDir, bodyBase, gender);
       if (deltaBodyFat < 0) {
-        bodyScale = bodyBase + (bodyScale - bodyBase) * 0.25;
+        sc = bodyBase + (sc - bodyBase) * 0.25;
       }
       // Monotone lateral silhouette on upscale: lateral-facing leg/hip
       // vertices between the knee and the widest hip may not scale below
@@ -651,15 +663,31 @@ export function deformMesh(
       ) {
         const t = (oy - silhouetteLowY) / (silhouetteHighY - silhouetteLowY);
         const floorS = silhouetteKneeScale + t * (silhouetteHipScale - silhouetteKneeScale);
-        if (bodyScale < floorS) bodyScale = mix(bodyScale, floorS, 0.85);
+        if (sc < floorS) sc = mix(sc, floorS, 0.85);
       }
       // Feet are bone and shoe-shaped: they take only a residual fraction
       // of the change.
       const footBlend = smoothstep(ankleYAvg - 0.02, ankleYAvg + 0.02, oy);
-      bodyScale = 1 + (bodyScale - 1) * mix(0.15, 1, footBlend);
+      return 1 + (sc - 1) * mix(0.15, 1, footBlend);
+    };
+
+    const pelvisScale = shapeScale(axisCX, axisCZ);
+    let bodyX = axisCX + (ox - axisCX) * pelvisScale;
+    let bodyZ = axisCZ + (oz - axisCZ) * pelvisScale;
+    const legBlend = 1 - smoothstep(legSplitHigh, legSplitHigh + 0.06, oy);
+    if (legBlend > 0) {
+      const legAxis = isNegativeX ? legAxisNeg : legAxisPos;
+      if (legAxis) {
+        const lp = sampleArmAxis(legAxis, oy);
+        const shX = isNegativeX ? legShiftNegX : legShiftPosX;
+        const shZ = isNegativeX ? legShiftNegZ : legShiftPosZ;
+        const legScale = shapeScale(lp.x, lp.z);
+        const legX = lp.x + shX + (ox - lp.x) * legScale;
+        const legZ = lp.z + shZ + (oz - lp.z) * legScale;
+        bodyX = mix(bodyX, legX, legBlend);
+        bodyZ = mix(bodyZ, legZ, legBlend);
+      }
     }
-    const bodyX = bodyCX + bdx * bodyScale;
-    const bodyZ = bodyCZ + bdz * bodyScale;
 
     // ARM transform: this slice's skeleton point on the arm-axis polyline,
     // translated so the arm rides the torso. Inner arm / armpit geometry
@@ -694,14 +722,16 @@ export function deformMesh(
     }
   }
 
-  // ── Seam-pinned bridge geometry (scan webbing across the armpit gap):
-  // these sliver vertices take the average of their neighbors so the
-  // webbing stretches INSIDE the pit like skin instead of standing proud
-  // as tassels/flaps when the arm and torso surfaces move.
+  // ── Seam/webbing settle: bridge geometry across the armpit gap relaxes
+  // toward its neighbor average so the webbing stretches INSIDE the pit
+  // like skin instead of standing proud as tassels/flaps. seamPinned
+  // (load-time slivers) settle fully; demoted webbing strips settle at
+  // 70% so the fringe tucks in without collapsing the surface around it.
   if (adjacency && adjacency.length === vertexCount) {
     for (let iter = 0; iter < 4; iter++) {
       for (let i = 0; i < vertexCount; i++) {
-        if (!bindings[i]?.seamPinned) continue;
+        const hard = bindings[i]?.seamPinned === true;
+        if (!hard && !frameSettle[i]) continue;
         const neighbors = adjacency[i];
         if (!neighbors || neighbors.length === 0) continue;
         let ax = 0;
@@ -710,8 +740,11 @@ export function deformMesh(
           ax += positions[neighbors[j] * 3];
           az += positions[neighbors[j] * 3 + 2];
         }
-        positions[i * 3] = ax / neighbors.length;
-        positions[i * 3 + 2] = az / neighbors.length;
+        ax /= neighbors.length;
+        az /= neighbors.length;
+        const w = hard ? 1 : 0.7;
+        positions[i * 3] += (ax - positions[i * 3]) * w;
+        positions[i * 3 + 2] += (az - positions[i * 3 + 2]) * w;
       }
     }
   }

@@ -193,6 +193,35 @@ function legColumnWidth(pos: Float32Array, yTarget: number): number {
   }
   return hi > lo ? hi - lo : 0;
 }
+const waistY = nRings.find((r) => r.name === 'NarrowWaist')!.height;
+
+/**
+ * Curvature-bump metric over the waist->knee lateral silhouette: for each
+ * interior 2cm bin, how far the width pokes above the average of its
+ * neighbors (a lump) or dips below it (a crease). Returns the max bump and
+ * dip in normalized units.
+ */
+function silhouetteSpikes(pos: Float32Array): { bump: number; dip: number } {
+  const prof = widthProfile(pos, 0.3);
+  const ys: number[] = [];
+  for (let y = Math.round(kneeY / 0.02) * 0.02; y <= waistY + 1e-9; y += 0.02) {
+    ys.push(Math.round(y / 50) * 50 === 0 ? Math.round(y * 50) / 50 : Math.round(y * 50) / 50);
+  }
+  let bump = 0;
+  let dip = 0;
+  for (let k = 1; k < ys.length - 1; k++) {
+    const w0 = prof.get(ys[k - 1]);
+    const w1 = prof.get(ys[k]);
+    const w2 = prof.get(ys[k + 1]);
+    if (w0 === undefined || w1 === undefined || w2 === undefined) continue;
+    const mid = (w0 + w2) / 2;
+    if (w1 - mid > bump) bump = w1 - mid;
+    if (mid - w1 > dip) dip = mid - w1;
+  }
+  return { bump, dip };
+}
+const baseSpikes = silhouetteSpikes(originalPositions);
+
 function report(label: string, deltaBF: number) {
   const pos = new Float32Array(originalPositions);
   deformMesh(pos, originalPositions, bindings, nRings, deltaBF, zeroOv, adjacency, 'female', armThreshold, androidness);
@@ -223,8 +252,11 @@ function report(label: string, deltaBF: number) {
   const baseThigh = legColumnWidth(originalPositions, midThighY);
   const baseCalf = legColumnWidth(originalPositions, calfY);
   const baseKnee = legColumnWidth(originalPositions, kneeY);
+  const spikes = silhouetteSpikes(pos);
   console.log(
     `${label}: latDip(knee..hip)=${(dipMax * 1641).toFixed(1)}mm ` +
+    `bumpDelta=${((spikes.bump - baseSpikes.bump) * 1641).toFixed(1)}mm ` +
+    `dipDelta=${((spikes.dip - baseSpikes.dip) * 1641).toFixed(1)}mm ` +
     `armStandoff=${(armStandoff(pos) * 1641).toFixed(1)}mm ` +
     `armAxisDev=${(armAxisDeviation(pos) * 1641).toFixed(1)}mm | ` +
     `thighW ${(thighW / baseThigh - 1) * 100 | 0}% kneeW ${(kneeW / baseKnee - 1) * 100 | 0}% calfW ${(calfW / baseCalf - 1) * 100 | 0}% ` +
@@ -234,3 +266,22 @@ function report(label: string, deltaBF: number) {
 report('BF 30->30 ( 0)', 0);
 report('BF 30-> 5 (-25)', -25);
 report('BF 30->55 (+25)', +25);
+
+// ── Full-sweep gate: no silhouette lump/crease beyond natural + 3mm at
+// any BF step in either direction. This is the regression gate that
+// protects each direction while the other is tuned.
+console.log('--- sweep gate (waist->knee curvature, tolerance 3mm) ---');
+let pass = true;
+for (let d = -25; d <= 25; d += 5) {
+  if (d === 0) continue;
+  const pos = new Float32Array(originalPositions);
+  deformMesh(pos, originalPositions, bindings, nRings, d, zeroOv, adjacency, 'female', armThreshold, androidness);
+  const sp = silhouetteSpikes(pos);
+  const bumpD = (sp.bump - baseSpikes.bump) * 1641;
+  const dipD = (sp.dip - baseSpikes.dip) * 1641;
+  const ok = bumpD <= 3 && dipD <= 3;
+  if (!ok) pass = false;
+  console.log(`  d=${d >= 0 ? '+' : ''}${d}: bumpDelta=${bumpD.toFixed(1)}mm dipDelta=${dipD.toFixed(1)}mm ${ok ? 'OK' : 'FAIL'}`);
+}
+console.log(pass ? 'SWEEP GATE: PASS' : 'SWEEP GATE: FAIL');
+if (!pass) process.exit(1);
