@@ -1,4 +1,5 @@
 import type { SegmentId } from './scan';
+import type { TaskTrajectoryMetrics } from '@/lib/assessment/trajectoryMetrics';
 
 /** Current slider state captured at a moment in time */
 export interface SliderState {
@@ -62,6 +63,7 @@ export interface BIDSScores {
   maxDissatisfactionSegment: SegmentId;
 
   // Behavioral
+  trajectories: Record<TaskType, TaskTrajectoryMetrics>;
   perceivedTaskDuration: number;
   idealTaskDuration: number;
   partnerTaskDuration: number;

@@ -1,6 +1,7 @@
 import type { TaskResult, ActualMetrics, BIDSScores, SegmentDistortion } from '@/types/assessment';
 import type { SegmentId } from '@/types/scan';
 import { SEGMENTS, SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
+import { computeTrajectoryMetrics } from './trajectoryMetrics';
 
 /** BF% deviation threshold for clinical flag */
 export const CLINICAL_THRESHOLD = 5.0;
@@ -49,6 +50,16 @@ export function calculateBIDSScores(
     }
   }
 
+  // Adjustment-trajectory metrics: the behavioral record of HOW each
+  // answer was produced (path, reversals, overshoot, dwell, engagement
+  // order, revisits) — distinct from the endpoint scores above. The global
+  // slider's start value is the participant's actual BF.
+  const trajectories = {
+    perceived: computeTrajectoryMetrics(perceived.adjustmentTrajectory, actual.bodyFat),
+    ideal: computeTrajectoryMetrics(ideal.adjustmentTrajectory, actual.bodyFat),
+    partner: computeTrajectoryMetrics(partner.adjustmentTrajectory, actual.bodyFat),
+  };
+
   // Durations
   const perceivedTaskDuration = perceived.durationMs;
   const idealTaskDuration = ideal.durationMs;
@@ -64,6 +75,7 @@ export function calculateBIDSScores(
     segmentDistortions,
     maxDistortionSegment: maxDistortionSeg,
     maxDissatisfactionSegment: maxDissatisfactionSeg,
+    trajectories,
     perceivedTaskDuration,
     idealTaskDuration,
     partnerTaskDuration,

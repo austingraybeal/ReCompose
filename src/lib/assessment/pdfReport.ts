@@ -214,7 +214,38 @@ export async function generatePDFReport(record: AssessmentRecord, scores: BIDSSc
   doc.text(`Partner: ${formatDuration(scores.partnerTaskDuration)} (${record.tasks.partner.resetCount} resets)`, margin, y);
   y += 4;
   doc.text(`Total: ${formatDuration(scores.totalAssessmentDuration)}`, margin, y);
-  y += 10;
+  y += 8;
+
+  // Adjustment Trajectory
+  doc.setTextColor(62, 207, 180);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ADJUSTMENT TRAJECTORY', margin, y);
+  y += 6;
+
+  doc.setTextColor(156, 160, 174);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  const taskLabels: Array<['perceived' | 'ideal' | 'partner', string]> = [
+    ['perceived', 'Perceived'],
+    ['ideal', 'Ideal'],
+    ['partner', 'Partner'],
+  ];
+  for (const [taskKey, label] of taskLabels) {
+    const m = scores.trajectories[taskKey];
+    const dwell = m.longestDwellControl ?? 'none';
+    doc.text(
+      `${label}: ${m.totalAdjustments} adjustments, path ${m.totalPathLength.toFixed(1)}, ` +
+        `${m.totalDirectionReversals} reversals, ${m.totalRevisits} revisits, longest dwell: ${dwell}`,
+      margin,
+      y,
+    );
+    y += 4;
+    const order = m.engagementOrder.slice(0, 6).join(' > ') || 'no adjustments';
+    doc.text(`   engagement order: ${order}${m.engagementOrder.length > 6 ? ' ...' : ''}`, margin, y);
+    y += 5;
+  }
+  y += 3;
 
   // Footer
   doc.setDrawColor(38, 42, 56);
