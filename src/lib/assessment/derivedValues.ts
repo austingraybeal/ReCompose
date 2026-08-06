@@ -9,6 +9,8 @@ export interface DerivedRow {
   key: string;
   label: string;
   unit: string;
+  /** Decimal places for display (default 1). */
+  precision?: number;
   /** Value at the actual measured body. */
   actual: number;
   /** Implied value for each administered task's avatar state. */
@@ -46,11 +48,21 @@ export function computeDerivedValues(
     perTaskM[t] = project(task.finalState.globalBodyFat, task.finalState.segmentOverrides);
   }
 
-  const defs: Array<{ key: keyof ReturnType<typeof project>; label: string; unit: string }> = [
+  const defs: Array<{
+    key: keyof ReturnType<typeof project>;
+    label: string;
+    unit: string;
+    precision?: number;
+  }> = [
+    { key: 'heightCm', label: 'Height', unit: 'cm' },
     { key: 'weight', label: 'Weight', unit: 'lbs' },
-    { key: 'bmi', label: 'BMI', unit: '' },
+    { key: 'bmi', label: 'BMI', unit: 'kg/m²' },
+    { key: 'bodyFat', label: 'Fat', unit: '%' },
+    { key: 'fatMassLb', label: 'Fat Mass', unit: 'lbs' },
+    { key: 'fatFreeMassLb', label: 'Fat-Free Mass', unit: 'lbs' },
     { key: 'waistCirc', label: 'Waist', unit: 'cm' },
     { key: 'hipCirc', label: 'Hip', unit: 'cm' },
+    { key: 'whtr', label: 'WHtR', unit: '', precision: 2 },
     { key: 'shoulderCirc', label: 'Shoulder', unit: 'cm' },
     { key: 'torsoVolumeL', label: 'Torso Volume', unit: 'L' },
     { key: 'chestCirc', label: 'Chest', unit: 'cm' },
@@ -66,6 +78,7 @@ export function computeDerivedValues(
       key: d.key as string,
       label: d.label,
       unit: d.unit,
+      ...(d.precision !== undefined ? { precision: d.precision } : {}),
       actual: actualM[d.key] as number,
       perTask: Object.fromEntries(
         Object.entries(perTaskM).map(([t, m]) => [t, m![d.key] as number]),

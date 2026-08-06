@@ -181,11 +181,27 @@ export function projectMetrics(
 
   const estimatedWHR = estimatedHip > 0 ? estimatedWaist / estimatedHip : 0;
 
+  // Height is fixed per scan: prefer the core-measures TotalHeight (cm);
+  // fall back to the body-composition Height (inches) converted to cm.
+  const heightCm =
+    measures['TotalHeight'] ??
+    (bodyComp['Height'] ? bodyComp['Height'] * 2.54 : 0);
+
+  // Body-composition splits at the current BF%.
+  const fatMassLb = estimatedWeight * (currentBF / 100);
+  const fatFreeMassLb = estimatedWeight - fatMassLb;
+  const estimatedWHtR = heightCm > 0 ? estimatedWaist / heightCm : 0;
+
   const r1 = (v: number) => Math.round(v * 10) / 10;
 
   return {
     weight: r1(estimatedWeight),
     bmi: r1(estimatedBMI),
+    bodyFat: r1(currentBF),
+    heightCm: r1(heightCm),
+    fatMassLb: r1(fatMassLb),
+    fatFreeMassLb: r1(fatFreeMassLb),
+    whtr: Math.round(estimatedWHtR * 100) / 100,
     waistCirc: r1(estimatedWaist),
     hipCirc: r1(estimatedHip),
     whr: Math.round(estimatedWHR * 100) / 100,

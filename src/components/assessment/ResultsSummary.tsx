@@ -418,13 +418,13 @@ export default function ResultsSummary() {
                       {row.label}{row.unit ? ` (${row.unit})` : ''}
                     </td>
                     <td className="text-right px-4 py-2 tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
-                      {row.actual.toFixed(1)}
+                      {row.actual.toFixed(row.precision ?? 1)}
                     </td>
                     {tasks.map((t) => {
                       const v = row.perTask[t];
                       return (
                         <td key={t} className="text-right px-4 py-2 tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
-                          {v === undefined ? '—' : v.toFixed(1)}
+                          {v === undefined ? '—' : v.toFixed(row.precision ?? 1)}
                         </td>
                       );
                     })}

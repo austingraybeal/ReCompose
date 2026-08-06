@@ -93,9 +93,19 @@ export type CameraPreset = 'front' | 'side' | 'back' | 'quarter';
 export interface ProjectedMetrics {
   weight: number;
   bmi: number;
+  /** Current body fat % (the value the global slider implies). */
+  bodyFat: number;
+  /** Standing height in cm — fixed per scan, never scales. */
+  heightCm: number;
+  /** Fat mass in lbs: weight x (bodyFat / 100). */
+  fatMassLb: number;
+  /** Fat-free mass in lbs: weight - fat mass. */
+  fatFreeMassLb: number;
   waistCirc: number;
   hipCirc: number;
   whr: number;
+  /** Waist-to-height ratio: projected waist / fixed height (both cm). */
+  whtr: number;
   /** Per-segment circumferences (cm, right side by default; 0 = not in scan) */
   shoulderCirc: number;
   /** Torso volume in liters (0 = not in scan). Scales with circumference squared. */

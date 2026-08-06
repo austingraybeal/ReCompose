@@ -87,11 +87,20 @@ export default function MetricsPanel() {
         Metrics
       </div>
       <div className="flex flex-col divide-y" style={{ borderColor: 'var(--rc-border-subtle)' }}>
+        {originalMetrics.heightCm > 0 && (
+          <MetricRow label="Height" value={originalMetrics.heightCm} originalValue={originalMetrics.heightCm} unit="cm" />
+        )}
         <MetricRow label="Weight" value={metrics.weight} originalValue={originalMetrics.weight} unit="lbs" />
-        <MetricRow label="BMI" value={metrics.bmi} originalValue={originalMetrics.bmi} unit="" />
+        <MetricRow label="BMI" value={metrics.bmi} originalValue={originalMetrics.bmi} unit="kg/m²" />
+        <MetricRow label="Fat" value={metrics.bodyFat} originalValue={originalMetrics.bodyFat} unit="%" />
+        <MetricRow label="Fat Mass" value={metrics.fatMassLb} originalValue={originalMetrics.fatMassLb} unit="lbs" />
+        <MetricRow label="Fat-Free Mass" value={metrics.fatFreeMassLb} originalValue={originalMetrics.fatFreeMassLb} unit="lbs" />
         <MetricRow label="Waist" value={metrics.waistCirc} originalValue={originalMetrics.waistCirc} unit="cm" />
         <MetricRow label="Hip" value={metrics.hipCirc} originalValue={originalMetrics.hipCirc} unit="cm" />
         <MetricRow label="WHR" value={metrics.whr} originalValue={originalMetrics.whr} unit="" precision={2} />
+        {originalMetrics.heightCm > 0 && (
+          <MetricRow label="WHtR" value={metrics.whtr} originalValue={originalMetrics.whtr} unit="" precision={2} />
+        )}
         {originalMetrics.shoulderCirc > 0 && (
           <MetricRow label="Shoulder" value={metrics.shoulderCirc} originalValue={originalMetrics.shoulderCirc} unit="cm" />
         )}

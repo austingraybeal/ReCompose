@@ -116,7 +116,7 @@ export function generateCSVExport(
           ...tasks.map((t) => row.perTask[t] ?? ''),
           ...tasks.map((t) => {
             const v = row.perTask[t];
-            return v === undefined ? '' : (v - row.actual).toFixed(1);
+            return v === undefined ? '' : (v - row.actual).toFixed(row.precision ?? 1);
           }),
         ].join(','),
       );

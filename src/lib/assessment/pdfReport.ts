@@ -380,13 +380,14 @@ export async function generatePDFReport(
           doc.rect(dColX(i) - 1, y - 3.2, dTaskW - 1, 4.6, 'F');
         }
       });
+      const prec = row.precision ?? 1;
       doc.setTextColor(...TEXT_SECONDARY);
       doc.text(`${row.label}${row.unit ? ` (${row.unit})` : ''}`, margin + 1.5, y);
       doc.setTextColor(...TEXT);
-      doc.text(row.actual.toFixed(1), margin + dLabelW, y);
+      doc.text(row.actual.toFixed(prec), margin + dLabelW, y);
       tasks.forEach((t, i) => {
         const v = row.perTask[t];
-        doc.text(v === undefined ? '-' : v.toFixed(1), dColX(i), y);
+        doc.text(v === undefined ? '-' : v.toFixed(prec), dColX(i), y);
       });
       y += 5;
     }
