@@ -25,14 +25,14 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
       className="px-3 py-2 rounded-xl transition-all duration-200"
       style={{
         background: isActive
-          ? 'linear-gradient(135deg, rgba(62, 207, 180, 0.08), rgba(62, 207, 180, 0.02))'
+          ? 'linear-gradient(135deg, rgba(168, 98, 248, 0.08), rgba(168, 98, 248, 0.02))'
           : 'var(--rc-bg-elevated)',
         border: isActive
-          ? '1px solid rgba(62, 207, 180, 0.3)'
+          ? '1px solid rgba(168, 98, 248, 0.3)'
           : focused
-            ? '1px solid rgba(62, 207, 180, 0.2)'
+            ? '1px solid rgba(168, 98, 248, 0.2)'
             : '1px solid var(--rc-border-subtle)',
-        boxShadow: isActive ? '0 0 12px rgba(62, 207, 180, 0.08)' : 'none',
+        boxShadow: isActive ? '0 0 12px rgba(168, 98, 248, 0.08)' : 'none',
       }}
     >
       <div className="flex items-center justify-between mb-1.5">
@@ -65,7 +65,7 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
         onChange={(e) => setOverride(segmentId, parseFloat(e.target.value))}
         className="w-full h-1"
         style={{
-          background: `linear-gradient(to right, #5db8d0, var(--rc-bg-hover) 50%, #5db8d0)`,
+          background: `linear-gradient(to right, #8f6df0, var(--rc-bg-hover) 50%, #8f6df0)`,
           borderRadius: '99px',
         }}
       />

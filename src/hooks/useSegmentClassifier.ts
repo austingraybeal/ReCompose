@@ -28,10 +28,10 @@ export function useSegmentClassifier() {
     const colors = new Float32Array(scanData.vertexBindings.length * 3);
 
     const colorMap: Record<string, [number, number, number]> = {
-      shoulders: [0.29, 0.78, 0.91],  // #4ac8e8
-      upper_arms: [0.36, 0.91, 0.82], // #5de8d0
-      forearms: [0.48, 0.94, 0.88],   // #7af0e0
-      torso: [0.29, 0.81, 0.63],      // #4acfa0
+      shoulders: [0.29, 0.78, 0.91],  // #7f9cf5
+      upper_arms: [0.36, 0.91, 0.82], // #7f9cff
+      forearms: [0.48, 0.94, 0.88],   // #9689ff
+      torso: [0.29, 0.81, 0.63],      // #b478ff
       waist: [0.94, 0.78, 0.29],      // #f0c84a
       hips: [0.94, 0.46, 0.29],       // #f0764a
       thighs: [0.65, 0.55, 0.98],     // #a78bfa

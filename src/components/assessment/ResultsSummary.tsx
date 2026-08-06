@@ -83,7 +83,7 @@ function DivergingBar({ label, value }: { label: string; value: number }) {
               width: `${pct}%`,
               background: isPositive
                 ? 'linear-gradient(90deg, var(--rc-accent), #f0c84a)'
-                : 'linear-gradient(90deg, #4ac8e8, var(--rc-accent))',
+                : 'linear-gradient(90deg, #7f9cf5, var(--rc-accent))',
               borderRadius: '9999px',
             }}
           />
@@ -216,7 +216,7 @@ export default function ResultsSummary() {
                   style={{
                     background: 'var(--rc-bg-surface)',
                     border: active ? '2px solid var(--rc-accent)' : '1px solid var(--rc-border-default)',
-                    boxShadow: active ? '0 0 20px rgba(62, 207, 180, 0.25)' : 'none',
+                    boxShadow: active ? '0 0 20px rgba(168, 98, 248, 0.25)' : 'none',
                   }}
                 >
                   {snap ? (
@@ -524,9 +524,9 @@ function DownloadPDFButton({ record, scores }: { record: import('@/types/assessm
       onClick={handleClick}
       className="px-5 py-2.5 rounded-xl font-mono font-bold text-rc-sm tracking-wide transition-all duration-200"
       style={{
-        background: 'linear-gradient(135deg, var(--rc-accent), #2aa88e)',
+        background: 'linear-gradient(135deg, var(--rc-accent), #4d1979)',
         color: '#0a0b0f',
-        boxShadow: '0 4px 16px rgba(62, 207, 180, 0.25)',
+        boxShadow: '0 4px 16px rgba(168, 98, 248, 0.25)',
       }}
     >
       Download PDF Report

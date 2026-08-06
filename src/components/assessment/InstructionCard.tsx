@@ -33,8 +33,8 @@ export default function InstructionCard({ taskType, taskIndex, taskCount }: Inst
             className="inline-flex items-center px-3.5 py-1 rounded-full text-[12px] uppercase tracking-[2px] font-mono font-bold whitespace-nowrap leading-none"
             style={{
               color: 'var(--rc-accent)',
-              background: 'rgba(62, 207, 180, 0.12)',
-              border: '1px solid rgba(62, 207, 180, 0.3)',
+              background: 'rgba(168, 98, 248, 0.12)',
+              border: '1px solid rgba(168, 98, 248, 0.3)',
             }}
           >
             Task {taskIndex + 1} of {taskCount}

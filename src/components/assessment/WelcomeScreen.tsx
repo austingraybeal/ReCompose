@@ -44,8 +44,8 @@ export default function WelcomeScreen() {
           <div
             className="w-14 h-14 rounded-full flex items-center justify-center"
             style={{
-              background: 'linear-gradient(135deg, rgba(62, 207, 180, 0.15), rgba(62, 207, 180, 0.05))',
-              border: '1px solid rgba(62, 207, 180, 0.25)',
+              background: 'linear-gradient(135deg, rgba(168, 98, 248, 0.15), rgba(168, 98, 248, 0.05))',
+              border: '1px solid rgba(168, 98, 248, 0.25)',
             }}
           >
             <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="var(--rc-accent)" strokeWidth="1.5">
@@ -115,11 +115,11 @@ export default function WelcomeScreen() {
                         className="px-3 py-1.5 rounded-full text-rc-xs font-mono transition-all duration-150 whitespace-nowrap"
                         style={{
                           background: on
-                            ? 'rgba(62, 207, 180, 0.15)'
+                            ? 'rgba(168, 98, 248, 0.15)'
                             : 'var(--rc-bg-elevated)',
                           color: on ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
                           border: on
-                            ? '1px solid rgba(62, 207, 180, 0.35)'
+                            ? '1px solid rgba(168, 98, 248, 0.35)'
                             : '1px solid var(--rc-border-default)',
                           opacity: locked ? 0.75 : 1,
                           cursor: locked ? 'default' : 'pointer',
@@ -149,12 +149,12 @@ export default function WelcomeScreen() {
           onClick={beginFirstTask}
           className="w-full py-3 rounded-xl font-mono font-bold text-rc-sm tracking-wide transition-all duration-200"
           style={{
-            background: 'linear-gradient(135deg, var(--rc-accent), #2aa88e)',
+            background: 'linear-gradient(135deg, var(--rc-accent), #4d1979)',
             color: '#0a0b0f',
-            boxShadow: '0 4px 20px rgba(62, 207, 180, 0.25)',
+            boxShadow: '0 4px 20px rgba(168, 98, 248, 0.25)',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 28px rgba(62, 207, 180, 0.4)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(62, 207, 180, 0.25)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 28px rgba(168, 98, 248, 0.4)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(168, 98, 248, 0.25)'; }}
         >
           Begin Assessment
         </button>

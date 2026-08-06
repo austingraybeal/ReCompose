@@ -116,7 +116,7 @@ export default function UploadZone() {
       <motion.div
         className="relative rounded-2xl p-6 text-center cursor-pointer transition-all duration-200"
         style={{
-          background: dragOver ? 'rgba(62, 207, 180, 0.08)' : 'var(--rc-bg-surface)',
+          background: dragOver ? 'rgba(168, 98, 248, 0.08)' : 'var(--rc-bg-surface)',
           border: dragOver ? '2px dashed var(--rc-accent)' : '2px dashed var(--rc-border-default)',
           boxShadow: dragOver ? 'var(--rc-shadow-glow)' : 'none',
         }}
@@ -156,7 +156,7 @@ export default function UploadZone() {
               border: slot.content
                 ? '1px solid var(--rc-border-accent)'
                 : '1px solid var(--rc-border-default)',
-              boxShadow: slot.content ? '0 0 10px rgba(62, 207, 180, 0.1)' : 'none',
+              boxShadow: slot.content ? '0 0 10px rgba(168, 98, 248, 0.1)' : 'none',
             }}
           >
             <div className="flex items-center gap-3">
@@ -219,11 +219,6 @@ export default function UploadZone() {
         </motion.div>
       )}
 
-      <div className="mt-4 text-center">
-        <p className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
-          Your scan data never leaves your device.
-        </p>
-      </div>
     </div>
   );
 }

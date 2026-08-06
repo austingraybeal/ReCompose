@@ -14,10 +14,10 @@ import { Color, BufferAttribute, Plane, Vector3, DoubleSide } from 'three';
 const MESH_COLOR = new Color('#bccad8');
 
 const SEGMENT_COLORS: Record<string, Color> = {
-  shoulders: new Color('#4ac8e8'),
-  upper_arms: new Color('#5de8d0'),
-  forearms: new Color('#7af0e0'),
-  torso: new Color('#4acfa0'),
+  shoulders: new Color('#7f9cf5'),
+  upper_arms: new Color('#7f9cff'),
+  forearms: new Color('#9689ff'),
+  torso: new Color('#b478ff'),
   waist: new Color('#f0c84a'),
   hips: new Color('#f0764a'),
   thighs: new Color('#a78bfa'),

@@ -28,7 +28,7 @@ export default function ProgressBar({ currentStep, selectedTasks, completedTasks
                   background: isActive
                     ? 'var(--rc-accent)'
                     : isPast
-                      ? 'rgba(62, 207, 180, 0.2)'
+                      ? 'rgba(168, 98, 248, 0.2)'
                       : 'var(--rc-bg-surface)',
                   color: isActive
                     ? '#0a0b0f'
@@ -38,9 +38,9 @@ export default function ProgressBar({ currentStep, selectedTasks, completedTasks
                   border: isActive
                     ? '2px solid var(--rc-accent)'
                     : isPast
-                      ? '2px solid rgba(62, 207, 180, 0.3)'
+                      ? '2px solid rgba(168, 98, 248, 0.3)'
                       : '2px solid var(--rc-border-default)',
-                  boxShadow: isActive ? '0 0 12px rgba(62, 207, 180, 0.3)' : 'none',
+                  boxShadow: isActive ? '0 0 12px rgba(168, 98, 248, 0.3)' : 'none',
                 }}
               >
                 {isPast && !isActive ? (
@@ -67,7 +67,7 @@ export default function ProgressBar({ currentStep, selectedTasks, completedTasks
                 className="flex-1 h-px min-w-4"
                 style={{
                   background: isPast
-                    ? 'rgba(62, 207, 180, 0.3)'
+                    ? 'rgba(168, 98, 248, 0.3)'
                     : 'var(--rc-border-default)',
                 }}
               />

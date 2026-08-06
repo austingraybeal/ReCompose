@@ -5,7 +5,7 @@ import { useScanStore } from '@/lib/stores/scanStore';
 import { useViewStore } from '@/lib/stores/viewStore';
 import { Color, Plane, Vector3 } from 'three';
 
-const GHOST_COLOR = new Color('#3ecfb4');
+const GHOST_COLOR = new Color('#a862f8');
 
 /**
  * Renders the original (undeformed) mesh as a translucent wireframe overlay.

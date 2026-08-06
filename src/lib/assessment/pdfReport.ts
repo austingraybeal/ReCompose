@@ -20,7 +20,7 @@ type RGB = [number, number, number];
 
 const BG: RGB = [10, 11, 15];
 const SURFACE: RGB = [26, 29, 40];
-const ACCENT: RGB = [62, 207, 180];
+const ACCENT: RGB = [168, 98, 248];
 const TEXT: RGB = [232, 234, 237];
 const TEXT_SECONDARY: RGB = [156, 160, 174];
 const TEXT_DIM: RGB = [107, 112, 128];

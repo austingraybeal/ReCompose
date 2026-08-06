@@ -103,10 +103,10 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
         onClick={toggleShowValues}
         className="px-3 py-2 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
         style={{
-          background: showValues ? 'rgba(62, 207, 180, 0.12)' : 'var(--rc-bg-elevated)',
+          background: showValues ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
           color: showValues ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
           border: showValues
-            ? '1px solid rgba(62, 207, 180, 0.3)'
+            ? '1px solid rgba(168, 98, 248, 0.3)'
             : '1px solid var(--rc-border-default)',
         }}
       >
@@ -122,12 +122,12 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
         onClick={handleConfirmClick}
         className="px-6 py-2.5 rounded-xl font-mono font-bold text-rc-sm tracking-wide transition-all duration-200"
         style={{
-          background: 'linear-gradient(135deg, var(--rc-accent), #2aa88e)',
+          background: 'linear-gradient(135deg, var(--rc-accent), #4d1979)',
           color: '#0a0b0f',
-          boxShadow: '0 4px 16px rgba(62, 207, 180, 0.25)',
+          boxShadow: '0 4px 16px rgba(168, 98, 248, 0.25)',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(62, 207, 180, 0.4)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(62, 207, 180, 0.25)'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(168, 98, 248, 0.4)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(168, 98, 248, 0.25)'; }}
       >
         {getTaskDefinition(taskType).confirmLabel}
       </motion.button>

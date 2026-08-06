@@ -1,6 +1,7 @@
 'use client';
 
 import ToggleBar from '@/components/ui/ToggleBar';
+import BrandLogo from '@/components/ui/BrandLogo';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 
@@ -20,17 +21,7 @@ export default function Header() {
       }}
     >
       <div className="flex items-center gap-2.5">
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center"
-          style={{
-            background: 'linear-gradient(135deg, rgba(62, 207, 180, 0.2), rgba(62, 207, 180, 0.05))',
-            border: '1px solid rgba(62, 207, 180, 0.2)',
-          }}
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="var(--rc-accent)" strokeWidth="2">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" strokeLinecap="round" />
-          </svg>
-        </div>
+        <BrandLogo size={28} />
         <h1 className="font-mono font-bold text-rc-base" style={{ color: 'var(--rc-text-primary)' }}>
           Re<span style={{ color: 'var(--rc-accent)' }}>Compose</span>
         </h1>
@@ -57,10 +48,10 @@ export default function Header() {
               onClick={startAssessment}
               className="px-3.5 py-1.5 rounded-full text-rc-xs font-mono tracking-wide transition-all duration-200"
               style={{
-                background: 'linear-gradient(135deg, rgba(62, 207, 180, 0.2), rgba(62, 207, 180, 0.08))',
+                background: 'linear-gradient(135deg, rgba(168, 98, 248, 0.2), rgba(168, 98, 248, 0.08))',
                 color: 'var(--rc-accent)',
-                border: '1px solid rgba(62, 207, 180, 0.3)',
-                boxShadow: '0 0 12px rgba(62, 207, 180, 0.1)',
+                border: '1px solid rgba(168, 98, 248, 0.3)',
+                boxShadow: '0 0 12px rgba(168, 98, 248, 0.1)',
               }}
             >
               Assess Body Image
