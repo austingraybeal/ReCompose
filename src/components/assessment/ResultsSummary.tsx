@@ -11,8 +11,12 @@ import {
   interpretTaskDiscrepancy,
   getTopRegionalChanges,
   describeRegionalChanges,
+  getDiscrepancySeverity,
+  MEANINGFUL_THRESHOLD,
+  CLINICAL_THRESHOLD,
 } from '@/lib/assessment/scoring';
 import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
+import { SEGMENTS } from '@/lib/constants/segmentDefs';
 import { computeDerivedValues } from '@/lib/assessment/derivedValues';
 import type { BIDSScores, TaskType, SegmentDistortion } from '@/types/assessment';
 
@@ -27,12 +31,7 @@ function ScoreCard({
   interpretation: string;
   severity: 'low' | 'moderate' | 'high';
 }) {
-  const colorMap = {
-    low: 'var(--rc-accent)',
-    moderate: '#f0c84a',
-    high: '#e0445a',
-  };
-  const color = colorMap[severity];
+  const color = SEVERITY_COLORS[severity];
 
   return (
     <div
@@ -55,11 +54,21 @@ function ScoreCard({
   );
 }
 
-function getSeverity(magnitude: number): 'low' | 'moderate' | 'high' {
-  if (magnitude < 3) return 'low';
-  if (magnitude < 5) return 'moderate';
-  return 'high';
+const SEVERITY_COLORS = {
+  low: '#34d399',
+  moderate: '#f0c84a',
+  high: '#e0445a',
+} as const;
+
+/** Display name for a BF% discrepancy per the construct it measures. */
+function discrepancyName(task: TaskType): string {
+  if (task === 'perceived') return 'Body Image Distortion';
+  if (task === 'ideal') return 'Body Image Dissatisfaction';
+  return `Body Image Pressure — ${getTaskDefinition(task).shortLabel}`;
 }
+
+const controlLabel = (c: string): string =>
+  c === 'global' ? 'Global' : (SEGMENTS.find((s) => s.id === c)?.label ?? c);
 
 /** Zero-centered diverging bar: negative extends left, positive right. */
 function DivergingBar({ label, value }: { label: string; value: number }) {
@@ -105,14 +114,16 @@ function DivergingBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-/** Plain-language explanations for the behavioral metrics. */
+/** Behavioral metric definitions (report wording). */
 const BEHAVIOR_LEGEND: Array<[string, string]> = [
-  ['Adjustments', 'total slider movements made during the task'],
-  ['Path length', 'total distance the sliders traveled, not just where they ended — searching before committing'],
-  ['Reversals', 'direction changes (up-down-up) — indecision within a region'],
-  ['Revisits', 'times a slider was left and returned to — inability to leave an answer alone'],
-  ['Longest dwell', 'the body region engaged for the longest time'],
-  ['Engagement order', 'which controls were touched first'],
+  ['Adjustments', 'total number of slider movements made during the task – overall engagement effort; how much active searching the judgment required rather than direct retrieval of a stable appearance.'],
+  ['Path length', 'total distance the sliders traveled, regardless of where they ended – breadth of the search through body-size space; exploration cost of reaching the final judgment (high path length with a small net change = effortful convergence).'],
+  ['Reversals', 'number of direction changes within a slider (up–down–up) – indecision near the answer; oscillation around the subjective answer while localizing it.'],
+  ['Visits', 'number of separate times the participant came to a slider (leaving for another slider ends a visit) – how attentional allocation is spread across body regions; which regions drew attention and how often.'],
+  ['Revisits', 'times a slider was left and later returned to (visits − 1) – failure of answers to stay settled; slider-based analog of body-checking and evidence of configural (whole-body-dependent) regional perception.'],
+  ['Longest dwell', 'the slider engaged for the greatest span of time – the region of peak attentional hold; typically the most difficult or personally significant area to judge.'],
+  ['Engagement order', 'sequence in which sliders were first touched – priority structure of the body representation; which regions are most immediately self-relevant when constructing the perception.'],
+  ['Overshooting', 'distance traveled beyond final answer before coming back – level of uncertainty around internal representation.'],
 ];
 
 export default function ResultsSummary() {
@@ -181,28 +192,50 @@ export default function ResultsSummary() {
           </h2>
         </div>
 
-        {/* Clinical flag banner */}
-        {scores.clinicalFlag && (
-          <div
-            className="mb-6 px-4 py-3 rounded-xl flex items-start gap-3"
-            style={{
-              background: 'rgba(224, 68, 90, 0.1)',
-              border: '1px solid rgba(224, 68, 90, 0.3)',
-            }}
-          >
-            <svg className="w-5 h-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="#e0445a" strokeWidth="2">
-              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <div>
-              <div className="text-rc-sm font-medium" style={{ color: '#e0445a' }}>
-                Clinical Threshold Exceeded
-              </div>
-              <div className="text-rc-xs mt-0.5" style={{ color: 'var(--rc-text-secondary)' }}>
-                Body image distortion exceeds clinical threshold ({scores.distortionMagnitude.toFixed(1)} BF% units). Consider further assessment.
+        {/* Discrepancy banner for the selected image: severity-colored,
+            named for the construct (distortion / dissatisfaction / pressure) */}
+        {(() => {
+          const sev = getDiscrepancySeverity(viewDisplacement);
+          const color = SEVERITY_COLORS[sev];
+          const sevText =
+            sev === 'high'
+              ? `Clinical threshold exceeded (>${CLINICAL_THRESHOLD.toFixed(0)} BF%). Consider further assessment.`
+              : sev === 'moderate'
+                ? `Meaningful discrepancy (${MEANINGFUL_THRESHOLD.toFixed(0)}–${CLINICAL_THRESHOLD.toFixed(0)} BF%).`
+                : `Within the expected range (<${MEANINGFUL_THRESHOLD.toFixed(0)} BF%).`;
+          const interp =
+            selectedView === 'perceived'
+              ? interpretDistortion(viewDisplacement)
+              : interpretTaskDiscrepancy(selectedView, viewDisplacement);
+          const rgb = sev === 'high' ? '224, 68, 90' : sev === 'moderate' ? '240, 200, 74' : '52, 211, 153';
+          return (
+            <div
+              className="mb-6 px-4 py-3 rounded-xl flex items-start gap-3"
+              style={{
+                background: `rgba(${rgb}, 0.1)`,
+                border: `1px solid rgba(${rgb}, 0.3)`,
+              }}
+            >
+              {sev === 'high' ? (
+                <svg className="w-5 h-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
+                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
+                  <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" />
+                </svg>
+              )}
+              <div>
+                <div className="text-rc-sm font-medium" style={{ color }}>
+                  {discrepancyName(selectedView)}: {viewDisplacement > 0 ? '+' : ''}{viewDisplacement.toFixed(1)} BF%
+                </div>
+                <div className="text-rc-xs mt-0.5" style={{ color: 'var(--rc-text-secondary)' }}>
+                  {interp} {sevText}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Snapshots — clickable; drive the regional/behavioral views */}
         <div className="flex flex-wrap justify-center gap-3 mb-2">
@@ -246,11 +279,7 @@ export default function ResultsSummary() {
                   style={{
                     background: 'var(--rc-bg-surface)',
                     border: '1px solid var(--rc-border-default)',
-                    color: Math.abs(pill) < 1
-                      ? 'var(--rc-text-dim)'
-                      : pill > 0
-                        ? 'var(--rc-delta-positive)'
-                        : 'var(--rc-delta-negative)',
+                    color: SEVERITY_COLORS[getDiscrepancySeverity(pill)],
                   }}
                 >
                   {pill > 0 ? '+' : ''}{pill.toFixed(1)}%{key === 'perceived' ? ' vs actual' : ' vs perceived'}
@@ -284,7 +313,7 @@ export default function ResultsSummary() {
             label="Body Image Distortion (BIDS-D)"
             value={`${scores.distortion > 0 ? '+' : ''}${scores.distortion.toFixed(1)}%`}
             interpretation={interpretDistortion(scores.distortion)}
-            severity={getSeverity(scores.distortionMagnitude)}
+            severity={getDiscrepancySeverity(scores.distortionMagnitude)}
           />
           {comparisons.map((t) => {
             const d = scores.taskDiscrepancies[t] ?? 0;
@@ -295,7 +324,7 @@ export default function ResultsSummary() {
                 label={`${def.shortLabel} vs Perceived`}
                 value={`${d > 0 ? '+' : ''}${d.toFixed(1)}%`}
                 interpretation={interpretTaskDiscrepancy(t, d)}
-                severity={getSeverity(Math.abs(d))}
+                severity={getDiscrepancySeverity(d)}
               />
             );
           })}
@@ -380,7 +409,7 @@ export default function ResultsSummary() {
                   const d = imagePill(t);
                   return (
                     <td key={t} className="text-right px-4 py-2.5 tabular-nums" style={{
-                      color: Math.abs(d) < 1 ? 'var(--rc-text-dim)' : d > 0 ? 'var(--rc-delta-positive)' : 'var(--rc-delta-negative)',
+                      color: SEVERITY_COLORS[getDiscrepancySeverity(d)],
                     }}>
                       {d > 0 ? '+' : ''}{d.toFixed(1)}%
                     </td>
@@ -419,7 +448,7 @@ export default function ResultsSummary() {
               Implied Measurements
             </div>
             <div className="px-4 pt-1 pb-2 text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
-              Real-world values each avatar state corresponds to, from the same projection model as the live metrics.
+              Real-world values each avatar state corresponds to, using the live data.
             </div>
             <table className="w-full text-rc-xs font-mono">
               <thead>
@@ -474,24 +503,102 @@ export default function ResultsSummary() {
             </div>
           </div>
           {viewTrajectory ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <BehaviorStat
-                label="Duration"
-                value={formatDuration(scores.taskDurations[selectedView] ?? 0)}
-                sub={`${record.tasks[selectedView]!.resetCount} resets`}
-              />
-              <BehaviorStat label="Adjustments" value={`${viewTrajectory.totalAdjustments}`} sub={`path ${viewTrajectory.totalPathLength.toFixed(1)}`} />
-              <BehaviorStat label="Reversals" value={`${viewTrajectory.totalDirectionReversals}`} sub={`${viewTrajectory.totalRevisits} revisits`} />
-              <BehaviorStat
-                label="Longest Dwell"
-                value={viewTrajectory.longestDwellControl ?? '—'}
-                sub={`order: ${viewTrajectory.engagementOrder.slice(0, 3).join(' > ') || '—'}${viewTrajectory.engagementOrder.length > 3 ? ' …' : ''}`}
-              />
-            </div>
+            <>
+              {(() => {
+                const totalVisits = viewTrajectory.perControl.reduce(
+                  (sum, c) => sum + c.visitCount, 0);
+                const peakOvershoot = viewTrajectory.perControl.reduce(
+                  (best, c) => (c.overshootMagnitude > best.overshootMagnitude ? c : best),
+                  viewTrajectory.perControl[0]);
+                return (
+                  <div className="grid grid-cols-3 gap-x-4 gap-y-5 mb-5">
+                    <BehaviorStat
+                      label="Duration"
+                      value={formatDuration(scores.taskDurations[selectedView] ?? 0)}
+                      sub="time on task"
+                    />
+                    <BehaviorStat
+                      label="Adjustments"
+                      value={`${viewTrajectory.totalAdjustments}`}
+                      sub="slider movements"
+                    />
+                    <BehaviorStat
+                      label="Path Length"
+                      value={viewTrajectory.totalPathLength.toFixed(1)}
+                      sub="total slider travel"
+                    />
+                    <BehaviorStat
+                      label="Reversals"
+                      value={`${viewTrajectory.totalDirectionReversals}`}
+                      sub="direction changes"
+                    />
+                    <BehaviorStat
+                      label="Visits"
+                      value={`${totalVisits}`}
+                      sub="engagement episodes"
+                    />
+                    <BehaviorStat
+                      label="Revisits"
+                      value={`${viewTrajectory.totalRevisits}`}
+                      sub="returns to a slider"
+                    />
+                    <BehaviorStat
+                      label="Resets"
+                      value={`${record.tasks[selectedView]!.resetCount}`}
+                      sub="full slider resets"
+                    />
+                    <BehaviorStat
+                      label="Overshoot"
+                      value={peakOvershoot ? peakOvershoot.overshootMagnitude.toFixed(1) : '—'}
+                      sub={peakOvershoot && peakOvershoot.overshootMagnitude > 0
+                        ? `peak at ${controlLabel(peakOvershoot.control)}`
+                        : 'no overshoot'}
+                    />
+                    <BehaviorStat
+                      label="Longest Dwell"
+                      value={viewTrajectory.longestDwellControl
+                        ? controlLabel(viewTrajectory.longestDwellControl)
+                        : '—'}
+                      sub="peak attention"
+                    />
+                  </div>
+                );
+              })()}
+
+              {/* Engagement order as compact numbered chips */}
+              <div className="mb-5">
+                <div className="text-[10px] uppercase tracking-[1.5px] font-mono mb-2" style={{ color: 'var(--rc-text-dim)' }}>
+                  Engagement Order
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {viewTrajectory.engagementOrder.length > 0 ? (
+                    viewTrajectory.engagementOrder.map((c, i) => (
+                      <span
+                        key={c}
+                        className="px-2.5 py-1 rounded-full text-rc-xs font-mono"
+                        style={{
+                          background: 'var(--rc-bg-elevated)',
+                          border: '1px solid var(--rc-border-default)',
+                          color: 'var(--rc-text-secondary)',
+                        }}
+                      >
+                        <span style={{ color: 'var(--rc-accent)' }}>{i + 1}</span>
+                        {' '}{controlLabel(c)}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>No adjustments</span>
+                  )}
+                </div>
+              </div>
+            </>
           ) : (
             <div className="text-rc-xs mb-4" style={{ color: 'var(--rc-text-dim)' }}>No trajectory data.</div>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
+          <div
+            className="grid grid-cols-1 gap-y-1.5 pt-3"
+            style={{ borderTop: '1px solid var(--rc-border-subtle)' }}
+          >
             {BEHAVIOR_LEGEND.map(([term, expl]) => (
               <div key={term} className="text-rc-xs leading-relaxed" style={{ color: 'var(--rc-text-dim)' }}>
                 <span style={{ color: 'var(--rc-text-secondary)' }}>{term}:</span> {expl}
@@ -525,9 +632,9 @@ export default function ResultsSummary() {
 function BehaviorStat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div>
-      <div className="text-[9px] uppercase tracking-[1.5px] font-mono mb-1" style={{ color: 'var(--rc-text-dim)' }}>{label}</div>
-      <div className="font-mono font-bold text-rc-base" style={{ color: 'var(--rc-text-primary)' }}>{value}</div>
-      <div className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>{sub}</div>
+      <div className="text-[10px] uppercase tracking-[1.5px] font-mono mb-1" style={{ color: 'var(--rc-text-dim)' }}>{label}</div>
+      <div className="font-mono font-bold text-lg leading-tight" style={{ color: 'var(--rc-text-primary)' }}>{value}</div>
+      <div className="text-rc-xs mt-0.5" style={{ color: 'var(--rc-text-dim)' }}>{sub}</div>
     </div>
   );
 }

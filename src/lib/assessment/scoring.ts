@@ -13,6 +13,23 @@ import { getTaskDefinition } from './taskRegistry';
 /** BF% deviation threshold for clinical flag */
 export const CLINICAL_THRESHOLD = 5.0;
 
+/** Below this BF% magnitude a discrepancy is not considered meaningful. */
+export const MEANINGFUL_THRESHOLD = 2.0;
+
+export type DiscrepancySeverity = 'low' | 'moderate' | 'high';
+
+/**
+ * Severity band for a global BF% discrepancy, symmetric in both
+ * directions: <2 not meaningful (green), 2-5 meaningful (yellow),
+ * >5 clinical (red).
+ */
+export function getDiscrepancySeverity(magnitude: number): DiscrepancySeverity {
+  const m = Math.abs(magnitude);
+  if (m < MEANINGFUL_THRESHOLD) return 'low';
+  if (m <= CLINICAL_THRESHOLD) return 'moderate';
+  return 'high';
+}
+
 const SEGMENT_IDS: readonly SegmentId[] = SEGMENT_ORDER;
 
 /**
