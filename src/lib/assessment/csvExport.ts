@@ -1,6 +1,7 @@
 import type { AssessmentRecord, BIDSScores } from '@/types/assessment';
 import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
 import { getTaskDefinition } from './taskRegistry';
+import type { DerivedRow } from './derivedValues';
 
 /**
  * Generate CSV export of assessment scores for SPSS/R/Excel import.
@@ -14,7 +15,11 @@ import { getTaskDefinition } from './taskRegistry';
  *   2. '# trajectory_metrics' — long format, one row per task x control.
  *   3. '# raw_adjustment_events' — the complete adjustment stream.
  */
-export function generateCSVExport(record: AssessmentRecord, scores: BIDSScores): string {
+export function generateCSVExport(
+  record: AssessmentRecord,
+  scores: BIDSScores,
+  derived?: DerivedRow[],
+): string {
   const tasks = record.selectedTasks;
   const comparisons = tasks.filter((t) => t !== 'perceived');
 
@@ -86,7 +91,37 @@ export function generateCSVExport(record: AssessmentRecord, scores: BIDSScores):
     scores.clinicalFlag ? 1 : 0,
   ];
 
-  const lines: string[] = [headers.join(','), values.join(',')];
+  const lines: string[] = [
+    '# ReCompose BIDS Assessment Export',
+    `# scan: ${record.scanId}  |  exported: ${record.timestamp}`,
+    '',
+    '# summary',
+    headers.join(','),
+    values.join(','),
+  ];
+
+  // Derived real-world values implied by each task's avatar state
+  if (derived && derived.length > 0) {
+    lines.push('');
+    lines.push('# derived_measurements');
+    lines.push(
+      ['measure', 'unit', 'actual', ...tasks.map((t) => t), ...tasks.map((t) => `${t}_delta_vs_actual`)].join(','),
+    );
+    for (const row of derived) {
+      lines.push(
+        [
+          `"${row.label}"`,
+          row.unit,
+          row.actual,
+          ...tasks.map((t) => row.perTask[t] ?? ''),
+          ...tasks.map((t) => {
+            const v = row.perTask[t];
+            return v === undefined ? '' : (v - row.actual).toFixed(1);
+          }),
+        ].join(','),
+      );
+    }
+  }
 
   // Section 2: per-control trajectory metrics (long format)
   lines.push('');

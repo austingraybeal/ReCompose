@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useScanStore } from '@/lib/stores/scanStore';
+import { useViewStore } from '@/lib/stores/viewStore';
 import { useTrajectoryRecorder } from '@/hooks/useTrajectoryRecorder';
 import WelcomeScreen from './WelcomeScreen';
 import ProgressBar from './ProgressBar';
@@ -76,13 +77,22 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     }
   }, [currentStep, assessmentRecord, allDone, scanData, completeAssessment, scanFileName]);
 
-  // Capture canvas snapshot — find the WebGL canvas in the DOM
-  const captureSnapshot = useCallback((): string | undefined => {
+  // Capture canvas snapshot with the ghost overlay forced ON, so every
+  // task image shows the adjusted body against the original wireframe.
+  const captureSnapshot = useCallback(async (): Promise<string | undefined> => {
     try {
-      // Try the ref first, then fall back to DOM query
       const canvas = canvasRef?.current ?? document.querySelector('canvas');
       if (!canvas) return undefined;
-      return canvas.toDataURL('image/png');
+      const view = useViewStore.getState();
+      const hadGhost = view.ghostOverlay;
+      if (!hadGhost) view.toggleGhostOverlay();
+      // Wait two frames so the ghost renders before reading pixels.
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const url = canvas.toDataURL('image/png');
+      if (!hadGhost) useViewStore.getState().toggleGhostOverlay();
+      return url;
     } catch {
       return undefined;
     }

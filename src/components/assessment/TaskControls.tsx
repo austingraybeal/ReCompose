@@ -10,7 +10,7 @@ import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 
 interface TaskControlsProps {
   taskType: TaskType;
-  onCaptureSnapshot: () => string | undefined;
+  onCaptureSnapshot: () => Promise<string | undefined>;
 }
 
 export default function TaskControls({ taskType, onCaptureSnapshot }: TaskControlsProps) {
@@ -36,9 +36,9 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
     recordReset();
   }, [setGlobalBodyFat, originalBodyFat, resetRegionalOverrides, recordReset]);
 
-  const handleConfirmClick = useCallback(() => {
+  const handleConfirmClick = useCallback(async () => {
     // Single-click confirm (double-confirmation removed by design).
-    const snapshot = onCaptureSnapshot();
+    const snapshot = await onCaptureSnapshot();
     confirmTask(
       {
         globalBodyFat,

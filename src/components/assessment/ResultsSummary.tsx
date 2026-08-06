@@ -1,15 +1,20 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import { useScanStore } from '@/lib/stores/scanStore';
+import { useGenderStore } from '@/lib/stores/genderStore';
 import {
   formatDuration,
   interpretDistortion,
   interpretTaskDiscrepancy,
-  interpretRegionalDistortion,
+  getTopRegionalChanges,
+  describeRegionalChanges,
 } from '@/lib/assessment/scoring';
 import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
-import type { BIDSScores } from '@/types/assessment';
+import { computeDerivedValues } from '@/lib/assessment/derivedValues';
+import type { BIDSScores, TaskType, SegmentDistortion } from '@/types/assessment';
 
 function ScoreCard({
   label,
@@ -56,10 +61,10 @@ function getSeverity(magnitude: number): 'low' | 'moderate' | 'high' {
   return 'high';
 }
 
-function SegmentBar({ label, value }: { label: string; value: number }) {
-  const absValue = Math.abs(value);
-  const maxBar = 25;
-  const barWidth = Math.min((absValue / maxBar) * 100, 100);
+/** Zero-centered diverging bar: negative extends left, positive right. */
+function DivergingBar({ label, value }: { label: string; value: number }) {
+  const maxBar = 15;
+  const pct = Math.min(Math.abs(value) / maxBar, 1) * 50; // % of half-width
   const isPositive = value >= 0;
 
   return (
@@ -68,21 +73,25 @@ function SegmentBar({ label, value }: { label: string; value: number }) {
         {label}
       </span>
       <div className="flex-1 flex items-center gap-2">
-        <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'var(--rc-bg-primary)' }}>
+        <div className="flex-1 h-2.5 rounded-full relative overflow-hidden" style={{ background: 'var(--rc-bg-primary)' }}>
+          {/* center line */}
+          <div className="absolute top-0 bottom-0 w-px" style={{ left: '50%', background: 'var(--rc-border-default)' }} />
           <div
-            className="h-full rounded-full transition-all duration-500"
+            className="absolute top-0 bottom-0 transition-all duration-500"
             style={{
-              width: `${barWidth}%`,
+              left: isPositive ? '50%' : `${50 - pct}%`,
+              width: `${pct}%`,
               background: isPositive
                 ? 'linear-gradient(90deg, var(--rc-accent), #f0c84a)'
                 : 'linear-gradient(90deg, #4ac8e8, var(--rc-accent))',
+              borderRadius: '9999px',
             }}
           />
         </div>
         <span
-          className="text-rc-xs font-mono w-12 text-right tabular-nums"
+          className="text-rc-xs font-mono w-14 text-right tabular-nums"
           style={{
-            color: absValue < 1
+            color: Math.abs(value) < 1
               ? 'var(--rc-text-dim)'
               : isPositive
                 ? 'var(--rc-delta-positive)'
@@ -96,16 +105,56 @@ function SegmentBar({ label, value }: { label: string; value: number }) {
   );
 }
 
+/** Plain-language explanations for the behavioral metrics. */
+const BEHAVIOR_LEGEND: Array<[string, string]> = [
+  ['Adjustments', 'total slider movements made during the task'],
+  ['Path length', 'total distance the sliders traveled, not just where they ended — searching before committing'],
+  ['Reversals', 'direction changes (up-down-up) — indecision within a region'],
+  ['Revisits', 'times a slider was left and returned to — inability to leave an answer alone'],
+  ['Longest dwell', 'the body region engaged for the longest time'],
+  ['Engagement order', 'which controls were touched first'],
+];
+
 export default function ResultsSummary() {
   const record = useAssessmentStore((s) => s.assessmentRecord);
   const snapshots = useAssessmentStore((s) => s.snapshots);
   const resetAssessment = useAssessmentStore((s) => s.resetAssessment);
+  const scanData = useScanStore((s) => s.scanData);
+  const sex = useGenderStore((s) => s.gender);
+
+  const tasks = record?.selectedTasks ?? [];
+  const defaultView: TaskType = tasks.includes('ideal')
+    ? 'ideal'
+    : (tasks.find((t) => t !== 'perceived') ?? 'perceived');
+  const [selectedView, setSelectedView] = useState<TaskType>(defaultView);
+
+  const derived = useMemo(
+    () => (record && scanData ? computeDerivedValues(record, scanData, sex) : []),
+    [record, scanData, sex],
+  );
 
   if (!record) return null;
 
   const { scores } = record;
-  const tasks = record.selectedTasks;
   const comparisons = tasks.filter((t) => t !== 'perceived');
+
+  // Regional deltas for the selected view: perceived => vs actual;
+  // any other task => vs perceived.
+  const viewDelta = (sd: SegmentDistortion): number | undefined =>
+    selectedView === 'perceived' ? sd.perceivedDelta : sd.taskDeltas[selectedView];
+  const viewGlobal = record.tasks[selectedView]!.finalState.globalBodyFat;
+  const viewDisplacement =
+    selectedView === 'perceived'
+      ? scores.distortion
+      : (scores.taskDiscrepancies[selectedView] ?? 0);
+  const viewComparisonLabel =
+    selectedView === 'perceived' ? 'perceived vs actual' : `${getTaskDefinition(selectedView).shortLabel.toLowerCase()} vs perceived`;
+  const viewHighlights = getTopRegionalChanges(scores.segmentDistortions, viewDelta);
+  const viewTrajectory = scores.trajectories[selectedView];
+
+  // Per-image pill value: perceived shows distortion vs actual; others vs perceived.
+  const imagePill = (t: TaskType): number =>
+    t === 'perceived' ? scores.distortion : (scores.taskDiscrepancies[t] ?? 0);
 
   return (
     <motion.div
@@ -148,42 +197,64 @@ export default function ResultsSummary() {
           </div>
         )}
 
-        {/* Snapshots — one per administered task; remainder rows centered */}
-        {tasks.some((t) => snapshots[t]) && (
-          <div className="flex flex-wrap justify-center gap-3 mb-8">
-            {tasks.map((key) => {
-              const snap = snapshots[key];
-              const def = getTaskDefinition(key);
-              const highlight = key === 'ideal';
-              return (
-                <div key={key} className="text-center" style={{ width: 'calc(33.333% - 0.5rem)' }}>
-                  <div
-                    className="rounded-xl overflow-hidden mb-2 aspect-[3/4]"
-                    style={{
-                      background: 'var(--rc-bg-surface)',
-                      border: highlight ? '2px solid var(--rc-accent)' : '1px solid var(--rc-border-default)',
-                    }}
-                  >
-                    {snap ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={snap} alt={def.shortLabel} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
-                        No capture
-                      </div>
-                    )}
-                  </div>
-                  <span
-                    className="text-[12px] uppercase tracking-[2px] font-mono font-bold"
-                    style={{ color: highlight ? 'var(--rc-accent)' : 'var(--rc-text-secondary)' }}
-                  >
-                    {def.shortLabel}
-                  </span>
+        {/* Snapshots — clickable; drive the regional/behavioral views */}
+        <div className="flex flex-wrap justify-center gap-3 mb-2">
+          {tasks.map((key) => {
+            const snap = snapshots[key];
+            const def = getTaskDefinition(key);
+            const active = key === selectedView;
+            const pill = imagePill(key);
+            return (
+              <button
+                key={key}
+                onClick={() => setSelectedView(key)}
+                className="text-center transition-all duration-200"
+                style={{ width: 'calc(33.333% - 0.5rem)' }}
+              >
+                <div
+                  className="rounded-xl overflow-hidden mb-2 aspect-[3/4]"
+                  style={{
+                    background: 'var(--rc-bg-surface)',
+                    border: active ? '2px solid var(--rc-accent)' : '1px solid var(--rc-border-default)',
+                    boxShadow: active ? '0 0 20px rgba(62, 207, 180, 0.25)' : 'none',
+                  }}
+                >
+                  {snap ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={snap} alt={def.shortLabel} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+                      No capture
+                    </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div
+                  className="text-[13px] uppercase tracking-[2px] font-mono font-bold mb-1"
+                  style={{ color: active ? 'var(--rc-accent)' : 'var(--rc-text-secondary)' }}
+                >
+                  {def.shortLabel}
+                </div>
+                <span
+                  className="inline-block px-3 py-1 rounded-full text-[12px] font-mono font-bold leading-none"
+                  style={{
+                    background: 'var(--rc-bg-surface)',
+                    border: '1px solid var(--rc-border-default)',
+                    color: Math.abs(pill) < 1
+                      ? 'var(--rc-text-dim)'
+                      : pill > 0
+                        ? 'var(--rc-delta-positive)'
+                        : 'var(--rc-delta-negative)',
+                  }}
+                >
+                  {pill > 0 ? '+' : ''}{pill.toFixed(1)}%{key === 'perceived' ? ' vs actual' : ' vs perceived'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-center text-rc-xs mb-8" style={{ color: 'var(--rc-text-dim)' }}>
+          Click an image to explore its regional and behavioral results.
+        </div>
 
         {/* Score cards: distortion + every selected comparison vs perceived */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
@@ -208,7 +279,7 @@ export default function ResultsSummary() {
           })}
         </div>
 
-        {/* Regional distortion breakdown */}
+        {/* Regional distortion for the selected view (zero-centered bars) */}
         <div
           className="p-5 rounded-xl mb-8"
           style={{
@@ -216,18 +287,44 @@ export default function ResultsSummary() {
             border: '1px solid var(--rc-border-default)',
           }}
         >
-          <div className="text-[10px] uppercase tracking-[2px] font-mono mb-4" style={{ color: 'var(--rc-text-dim)' }}>
-            Regional Distortion (Perceived)
+          <div className="flex items-baseline justify-between mb-4">
+            <div className="text-[10px] uppercase tracking-[2px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+              Regional Distortion
+            </div>
+            <div className="text-rc-xs font-mono" style={{ color: 'var(--rc-accent)' }}>
+              {getTaskDefinition(selectedView).shortLabel} ({viewComparisonLabel})
+            </div>
           </div>
           {scores.segmentDistortions.map((sd) => (
-            <SegmentBar key={sd.segmentId} label={sd.label} value={sd.perceivedDelta} />
+            <DivergingBar key={sd.segmentId} label={sd.label} value={viewDelta(sd) ?? 0} />
           ))}
-          <div className="mt-4 text-rc-xs leading-relaxed" style={{ color: 'var(--rc-text-secondary)' }}>
-            {interpretRegionalDistortion(scores)}
+          <div className="mt-4 text-rc-sm leading-relaxed" style={{ color: 'var(--rc-text-secondary)' }}>
+            {describeRegionalChanges(viewHighlights, viewComparisonLabel)}
+          </div>
+          {/* Global displacement for the selected view */}
+          <div className="mt-3 pt-3 flex items-baseline gap-3" style={{ borderTop: '1px solid var(--rc-border-subtle)' }}>
+            <span className="text-rc-xs font-mono uppercase tracking-[1.5px]" style={{ color: 'var(--rc-text-dim)' }}>
+              Global BF%
+            </span>
+            <span className="font-mono font-bold text-rc-base" style={{ color: 'var(--rc-text-primary)' }}>
+              {viewGlobal.toFixed(1)}%
+            </span>
+            <span
+              className="font-mono text-rc-sm"
+              style={{
+                color: Math.abs(viewDisplacement) < 1
+                  ? 'var(--rc-text-dim)'
+                  : viewDisplacement > 0
+                    ? 'var(--rc-delta-positive)'
+                    : 'var(--rc-delta-negative)',
+              }}
+            >
+              ({viewDisplacement > 0 ? '+' : ''}{viewDisplacement.toFixed(1)} {viewComparisonLabel})
+            </span>
           </div>
         </div>
 
-        {/* Per-task table */}
+        {/* Per-task table with global displacement row */}
         <div
           className="rounded-xl overflow-x-auto mb-8"
           style={{
@@ -240,7 +337,7 @@ export default function ResultsSummary() {
               <tr style={{ background: 'var(--rc-bg-elevated)' }}>
                 <th className="text-left px-4 py-3" style={{ color: 'var(--rc-text-dim)' }}></th>
                 {tasks.map((t) => (
-                  <th key={t} className="text-right px-4 py-3" style={{ color: 'var(--rc-text-dim)' }}>
+                  <th key={t} className="text-right px-4 py-3" style={{ color: t === selectedView ? 'var(--rc-accent)' : 'var(--rc-text-dim)' }}>
                     {getTaskDefinition(t).shortLabel}
                   </th>
                 ))}
@@ -254,6 +351,19 @@ export default function ResultsSummary() {
                     {record.tasks[t]!.finalState.globalBodyFat.toFixed(1)}%
                   </td>
                 ))}
+              </tr>
+              <tr style={{ borderTop: '1px solid var(--rc-border-subtle)' }}>
+                <td className="px-4 py-2.5" style={{ color: 'var(--rc-text-secondary)' }}>Displacement</td>
+                {tasks.map((t) => {
+                  const d = imagePill(t);
+                  return (
+                    <td key={t} className="text-right px-4 py-2.5 tabular-nums" style={{
+                      color: Math.abs(d) < 1 ? 'var(--rc-text-dim)' : d > 0 ? 'var(--rc-delta-positive)' : 'var(--rc-delta-negative)',
+                    }}>
+                      {d > 0 ? '+' : ''}{d.toFixed(1)}%
+                    </td>
+                  );
+                })}
               </tr>
               {scores.segmentDistortions.map((sd) => (
                 <tr key={sd.segmentId} style={{ borderTop: '1px solid var(--rc-border-subtle)' }}>
@@ -274,7 +384,58 @@ export default function ResultsSummary() {
           </table>
         </div>
 
-        {/* Behavioral metrics */}
+        {/* Derived real-world measurements per task */}
+        {derived.length > 0 && (
+          <div
+            className="rounded-xl overflow-x-auto mb-8"
+            style={{
+              background: 'var(--rc-bg-surface)',
+              border: '1px solid var(--rc-border-default)',
+            }}
+          >
+            <div className="px-4 pt-4 text-[10px] uppercase tracking-[2px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+              Implied Measurements
+            </div>
+            <div className="px-4 pt-1 pb-2 text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+              Real-world values each avatar state corresponds to, from the same projection model as the live metrics.
+            </div>
+            <table className="w-full text-rc-xs font-mono">
+              <thead>
+                <tr style={{ background: 'var(--rc-bg-elevated)' }}>
+                  <th className="text-left px-4 py-2.5" style={{ color: 'var(--rc-text-dim)' }}>Measure</th>
+                  <th className="text-right px-4 py-2.5" style={{ color: 'var(--rc-text-dim)' }}>Actual</th>
+                  {tasks.map((t) => (
+                    <th key={t} className="text-right px-4 py-2.5" style={{ color: t === selectedView ? 'var(--rc-accent)' : 'var(--rc-text-dim)' }}>
+                      {getTaskDefinition(t).shortLabel}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {derived.map((row) => (
+                  <tr key={row.key} style={{ borderTop: '1px solid var(--rc-border-subtle)' }}>
+                    <td className="px-4 py-2" style={{ color: 'var(--rc-text-secondary)' }}>
+                      {row.label}{row.unit ? ` (${row.unit})` : ''}
+                    </td>
+                    <td className="text-right px-4 py-2 tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
+                      {row.actual.toFixed(1)}
+                    </td>
+                    {tasks.map((t) => {
+                      const v = row.perTask[t];
+                      return (
+                        <td key={t} className="text-right px-4 py-2 tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
+                          {v === undefined ? '—' : v.toFixed(1)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Behavioral metrics for the selected view */}
         <div
           className="p-5 rounded-xl mb-8"
           style={{
@@ -282,19 +443,38 @@ export default function ResultsSummary() {
             border: '1px solid var(--rc-border-default)',
           }}
         >
-          <div className="text-[10px] uppercase tracking-[2px] font-mono mb-3" style={{ color: 'var(--rc-text-dim)' }}>
-            Behavioral Metrics
+          <div className="flex items-baseline justify-between mb-3">
+            <div className="text-[10px] uppercase tracking-[2px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+              Behavioral Metrics
+            </div>
+            <div className="text-rc-xs font-mono" style={{ color: 'var(--rc-accent)' }}>
+              {getTaskDefinition(selectedView).shortLabel}
+            </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {tasks.map((t) => (
+          {viewTrajectory ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <BehaviorStat
-                key={t}
-                label={getTaskDefinition(t).shortLabel}
-                value={formatDuration(scores.taskDurations[t] ?? 0)}
-                sub={`${record.tasks[t]!.resetCount} resets`}
+                label="Duration"
+                value={formatDuration(scores.taskDurations[selectedView] ?? 0)}
+                sub={`${record.tasks[selectedView]!.resetCount} resets`}
               />
+              <BehaviorStat label="Adjustments" value={`${viewTrajectory.totalAdjustments}`} sub={`path ${viewTrajectory.totalPathLength.toFixed(1)}`} />
+              <BehaviorStat label="Reversals" value={`${viewTrajectory.totalDirectionReversals}`} sub={`${viewTrajectory.totalRevisits} revisits`} />
+              <BehaviorStat
+                label="Longest Dwell"
+                value={viewTrajectory.longestDwellControl ?? '—'}
+                sub={`order: ${viewTrajectory.engagementOrder.slice(0, 3).join(' > ') || '—'}${viewTrajectory.engagementOrder.length > 3 ? ' …' : ''}`}
+              />
+            </div>
+          ) : (
+            <div className="text-rc-xs mb-4" style={{ color: 'var(--rc-text-dim)' }}>No trajectory data.</div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
+            {BEHAVIOR_LEGEND.map(([term, expl]) => (
+              <div key={term} className="text-rc-xs leading-relaxed" style={{ color: 'var(--rc-text-dim)' }}>
+                <span style={{ color: 'var(--rc-text-secondary)' }}>{term}:</span> {expl}
+              </div>
             ))}
-            <BehaviorStat label="Total" value={formatDuration(scores.totalAssessmentDuration)} sub="total time" />
           </div>
         </div>
 
@@ -376,9 +556,12 @@ function DownloadJSONButton({ record }: { record: import('@/types/assessment').A
 }
 
 function DownloadCSVButton({ record, scores }: { record: import('@/types/assessment').AssessmentRecord; scores: BIDSScores }) {
+  const scanData = useScanStore((s) => s.scanData);
+  const sex = useGenderStore((s) => s.gender);
   const handleClick = async () => {
     const { generateCSVExport } = await import('@/lib/assessment/csvExport');
-    const csv = generateCSVExport(record, scores);
+    const derived = scanData ? computeDerivedValues(record, scanData, sex) : undefined;
+    const csv = generateCSVExport(record, scores, derived);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
