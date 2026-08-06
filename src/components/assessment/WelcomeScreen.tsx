@@ -2,23 +2,37 @@
 
 import { motion } from 'framer-motion';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import { TASK_DEFINITIONS, getTaskDefinition } from '@/lib/assessment/taskRegistry';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  core: 'Core Battery',
+  social: 'Social Influences',
+  athlete: 'Athlete Battery',
+};
 
 export default function WelcomeScreen() {
   const beginFirstTask = useAssessmentStore((s) => s.beginFirstTask);
+  const selectedTasks = useAssessmentStore((s) => s.selectedTasks);
+  const toggleTask = useAssessmentStore((s) => s.toggleTask);
+
+  const minutes = selectedTasks.length; // 1 minute per selected task
+  const selectedInOrder = TASK_DEFINITIONS.filter((d) => selectedTasks.includes(d.id));
+
+  const categories = ['core', 'social', 'athlete'] as const;
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(10, 11, 15, 0.92)', backdropFilter: 'blur(24px)' }}
+      className="absolute inset-0 z-50 flex items-center justify-center overflow-y-auto py-6"
+      style={{ background: 'rgba(10, 11, 15, 0.96)', backdropFilter: 'blur(24px)' }}
     >
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15, duration: 0.4 }}
-        className="max-w-md w-full mx-4 p-8 rounded-2xl"
+        className="max-w-lg w-full mx-4 p-8 rounded-2xl my-auto"
         style={{
           background: 'var(--rc-bg-elevated)',
           border: '1px solid var(--rc-border-default)',
@@ -26,7 +40,7 @@ export default function WelcomeScreen() {
         }}
       >
         {/* Icon */}
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center mb-5">
           <div
             className="w-14 h-14 rounded-full flex items-center justify-center"
             style={{
@@ -45,37 +59,81 @@ export default function WelcomeScreen() {
           className="text-center font-mono font-bold text-lg mb-2"
           style={{ color: 'var(--rc-text-primary)' }}
         >
-          Body Image Assessment
+          BIDS Assessment
         </h2>
 
-        <p className="text-center text-rc-sm mb-6" style={{ color: 'var(--rc-text-secondary)' }}>
-          This assessment measures how you perceive your body shape. You&apos;ll complete three short
-          tasks using the body adjustment controls. There are no right or wrong answers &mdash; adjust
-          the body based on your honest perception.
+        <p className="text-center text-rc-sm mb-5" style={{ color: 'var(--rc-text-secondary)' }}>
+          This assessment uses an avatar to measure how you perceive your appearance. For this,
+          you&apos;ll complete a few short tasks by changing the avatars relative to each task.
+          There are no right or wrong answers &mdash; adjust the body based on your honest
+          perception. Specifically, you will adjust the overall body and each segment to answer:
         </p>
 
-        <div className="space-y-3 mb-8">
-          <div className="flex items-start gap-3 px-3 py-2 rounded-lg" style={{ background: 'var(--rc-bg-surface)' }}>
-            <span className="font-mono text-rc-xs mt-0.5" style={{ color: 'var(--rc-accent)' }}>01</span>
-            <div>
-              <div className="text-rc-sm font-medium" style={{ color: 'var(--rc-text-primary)' }}>How You See Yourself</div>
-              <div className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>Adjust to match your perception</div>
+        {/* Selected task list (numbered, main text only) */}
+        <div className="space-y-2 mb-6">
+          {selectedInOrder.map((def, i) => (
+            <div
+              key={def.id}
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg"
+              style={{ background: 'var(--rc-bg-surface)' }}
+            >
+              <span className="font-mono text-rc-sm font-bold shrink-0" style={{ color: 'var(--rc-accent)' }}>
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <span className="text-rc-sm font-medium" style={{ color: 'var(--rc-text-primary)' }}>
+                {def.label}
+              </span>
             </div>
+          ))}
+        </div>
+
+        {/* Task selection toggles, grouped by category */}
+        <div
+          className="mb-6 p-4 rounded-xl"
+          style={{ background: 'var(--rc-bg-surface)', border: '1px solid var(--rc-border-subtle)' }}
+        >
+          <div className="text-[10px] uppercase tracking-[2px] font-mono mb-3" style={{ color: 'var(--rc-text-dim)' }}>
+            Assessment Tasks
           </div>
-          <div className="flex items-start gap-3 px-3 py-2 rounded-lg" style={{ background: 'var(--rc-bg-surface)' }}>
-            <span className="font-mono text-rc-xs mt-0.5" style={{ color: 'var(--rc-accent)' }}>02</span>
-            <div>
-              <div className="text-rc-sm font-medium" style={{ color: 'var(--rc-text-primary)' }}>How You Want to Look</div>
-              <div className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>Adjust to show your ideal body</div>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 px-3 py-2 rounded-lg" style={{ background: 'var(--rc-bg-surface)' }}>
-            <span className="font-mono text-rc-xs mt-0.5" style={{ color: 'var(--rc-accent)' }}>03</span>
-            <div>
-              <div className="text-rc-sm font-medium" style={{ color: 'var(--rc-text-primary)' }}>What Others Find Attractive</div>
-              <div className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>Adjust to show partner preference</div>
-            </div>
-          </div>
+          {categories.map((cat) => {
+            const defs = TASK_DEFINITIONS.filter((d) => d.category === cat);
+            if (defs.length === 0) return null;
+            return (
+              <div key={cat} className="mb-3 last:mb-0">
+                <div className="text-[9px] uppercase tracking-[1.5px] font-mono mb-1.5" style={{ color: 'var(--rc-text-dim)' }}>
+                  {CATEGORY_LABELS[cat]}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {defs.map((def) => {
+                    const on = selectedTasks.includes(def.id);
+                    const locked = getTaskDefinition(def.id).mandatory;
+                    return (
+                      <button
+                        key={def.id}
+                        onClick={() => toggleTask(def.id)}
+                        disabled={locked}
+                        className="px-3 py-1.5 rounded-full text-rc-xs font-mono transition-all duration-150 whitespace-nowrap"
+                        style={{
+                          background: on
+                            ? 'rgba(62, 207, 180, 0.15)'
+                            : 'var(--rc-bg-elevated)',
+                          color: on ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+                          border: on
+                            ? '1px solid rgba(62, 207, 180, 0.35)'
+                            : '1px solid var(--rc-border-default)',
+                          opacity: locked ? 0.75 : 1,
+                          cursor: locked ? 'default' : 'pointer',
+                        }}
+                      >
+                        {def.shortLabel}
+                        {locked && ' ●'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex items-center gap-2 mb-6">
@@ -83,7 +141,7 @@ export default function WelcomeScreen() {
             <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" />
           </svg>
           <span className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
-            ~5 minutes &middot; Data processed entirely on your device
+            ~{minutes} minute{minutes === 1 ? '' : 's'}
           </span>
         </div>
 

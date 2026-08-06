@@ -1,6 +1,7 @@
 'use client';
 
 import { useMetricProjection } from '@/hooks/useMetricProjection';
+import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import { motion } from 'framer-motion';
 
 interface MetricRowProps {
@@ -52,6 +53,16 @@ function MetricRow({ label, value, originalValue, unit, precision = 1 }: MetricR
 
 export default function MetricsPanel() {
   const { metrics, originalMetrics } = useMetricProjection();
+  const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
+  const currentStep = useAssessmentStore((s) => s.currentStep);
+  const showValues = useAssessmentStore((s) => s.showValues);
+
+  // During BIDS tasks the derived metrics would leak the hidden BF numbers;
+  // the whole panel hides unless the investigator reveals values.
+  const inTask =
+    isAssessmentMode && currentStep !== null &&
+    currentStep !== 'welcome' && currentStep !== 'complete';
+  if (inTask && !showValues) return null;
 
   if (!metrics || !originalMetrics) {
     return (

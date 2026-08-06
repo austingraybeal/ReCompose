@@ -19,6 +19,8 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
   const confirmTask = useAssessmentStore((s) => s.confirmTask);
   const goBack = useAssessmentStore((s) => s.goBack);
   const recordReset = useAssessmentStore((s) => s.recordReset);
+  const showValues = useAssessmentStore((s) => s.showValues);
+  const toggleShowValues = useAssessmentStore((s) => s.toggleShowValues);
 
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
@@ -93,6 +95,22 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
         }}
       >
         Reset
+      </button>
+
+      {/* Numeric readouts are hidden by default during BIDS tasks; this
+          toggle reveals them (data records either way). */}
+      <button
+        onClick={toggleShowValues}
+        className="px-3 py-2 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
+        style={{
+          background: showValues ? 'rgba(62, 207, 180, 0.12)' : 'var(--rc-bg-elevated)',
+          color: showValues ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+          border: showValues
+            ? '1px solid rgba(62, 207, 180, 0.3)'
+            : '1px solid var(--rc-border-default)',
+        }}
+      >
+        {showValues ? 'Hide Values' : 'Show Values'}
       </button>
 
       <div className="flex-1" />

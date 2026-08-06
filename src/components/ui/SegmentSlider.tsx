@@ -1,6 +1,7 @@
 'use client';
 
 import { useMorphStore } from '@/lib/stores/morphStore';
+import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import type { SegmentId } from '@/types/scan';
 
 interface SegmentSliderProps {
@@ -13,6 +14,9 @@ interface SegmentSliderProps {
 export default function SegmentSlider({ segmentId, label, icon, focused }: SegmentSliderProps) {
   const value = useMorphStore((s) => s.segmentOverrides[segmentId]);
   const setOverride = useMorphStore((s) => s.setSegmentOverride);
+  const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
+  const showValues = useAssessmentStore((s) => s.showValues);
+  const hideNumbers = isAssessmentMode && !showValues;
 
   const isActive = value !== 0;
 
@@ -46,7 +50,7 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
             color: isActive ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
           }}
         >
-          {value > 0 ? '+' : ''}{value}%
+          {hideNumbers ? '·' : `${value > 0 ? '+' : ''}${value}%`}
         </span>
       </div>
 

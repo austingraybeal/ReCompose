@@ -1,7 +1,15 @@
 import { create } from 'zustand';
 import type { CameraPreset } from '@/types/scan';
 
+export type AppMode = 'free' | 'bids';
+
 interface ViewState {
+  /**
+   * Entry mode chosen on the upload screen. 'free' = FreeCompose viewer;
+   * 'bids' = launch straight into the BIDS assessment so participants
+   * don't explore their avatar before the tasks. Null until chosen.
+   */
+  appMode: AppMode | null;
   wireframe: boolean;
   ghostOverlay: boolean;
   segmentHighlight: boolean;
@@ -10,6 +18,7 @@ interface ViewState {
   regionalPanelOpen: boolean;
   focusedSegment: string | null;
 
+  setAppMode: (mode: AppMode | null) => void;
   toggleWireframe: () => void;
   toggleGhostOverlay: () => void;
   toggleSegmentHighlight: () => void;
@@ -20,6 +29,7 @@ interface ViewState {
 }
 
 export const useViewStore = create<ViewState>((set) => ({
+  appMode: null,
   // Wireframe defaults ON in both modes (product decision: the mesh reads
   // better and BIDS participants see less literal skin detail).
   wireframe: true,
@@ -30,6 +40,7 @@ export const useViewStore = create<ViewState>((set) => ({
   regionalPanelOpen: false,
   focusedSegment: null,
 
+  setAppMode: (mode) => set({ appMode: mode }),
   toggleWireframe: () => set((s) => ({ wireframe: !s.wireframe })),
   toggleGhostOverlay: () => set((s) => ({ ghostOverlay: !s.ghostOverlay })),
   toggleSegmentHighlight: () => set((s) => ({ segmentHighlight: !s.segmentHighlight })),

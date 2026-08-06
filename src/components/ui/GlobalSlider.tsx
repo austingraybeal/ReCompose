@@ -25,6 +25,8 @@ export default function GlobalSlider() {
   const sex = useGenderStore((s) => s.gender);
   const bodyComp = useScanStore((s) => s.scanData?.bodyComp);
   const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
+  const showValues = useAssessmentStore((s) => s.showValues);
+  const hideNumbers = isAssessmentMode && !showValues;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalBodyFat(parseFloat(e.target.value));
@@ -56,7 +58,7 @@ export default function GlobalSlider() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'spring', damping: 20, stiffness: 200 }}
         >
-          {Math.round(displayBodyFat)}%
+          {hideNumbers ? '· · ·' : `${Math.round(displayBodyFat)}%`}
         </motion.div>
         <div className="pb-2">
           <div className="text-rc-xs uppercase tracking-[3px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>

@@ -3,18 +3,62 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useScanStore } from '@/lib/stores/scanStore';
+import { useViewStore, type AppMode } from '@/lib/stores/viewStore';
 import UploadZone from '@/components/ui/UploadZone';
 import { motion } from 'framer-motion';
+
+function ModeButton({
+  mode,
+  title,
+  desc,
+  selected,
+  onSelect,
+}: {
+  mode: AppMode;
+  title: string;
+  desc: string;
+  selected: boolean;
+  onSelect: (mode: AppMode) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(mode)}
+      className="flex-1 px-5 py-4 rounded-xl text-left transition-all duration-200"
+      style={{
+        background: selected
+          ? 'linear-gradient(135deg, rgba(62, 207, 180, 0.18), rgba(62, 207, 180, 0.06))'
+          : 'var(--rc-bg-elevated)',
+        border: selected
+          ? '2px solid var(--rc-accent)'
+          : '1px solid var(--rc-border-default)',
+        boxShadow: selected ? '0 0 24px rgba(62, 207, 180, 0.15)' : 'none',
+      }}
+    >
+      <div
+        className="font-mono font-bold text-rc-base mb-1"
+        style={{ color: selected ? 'var(--rc-accent)' : 'var(--rc-text-primary)' }}
+      >
+        {title}
+      </div>
+      <div className="text-rc-xs leading-relaxed" style={{ color: 'var(--rc-text-secondary)' }}>
+        {desc}
+      </div>
+    </button>
+  );
+}
 
 export default function HomePage() {
   const router = useRouter();
   const scanData = useScanStore((s) => s.scanData);
+  const appMode = useViewStore((s) => s.appMode);
+  const setAppMode = useViewStore((s) => s.setAppMode);
 
+  // A mode must be chosen before the viewer opens.
   useEffect(() => {
-    if (scanData) {
+    if (scanData && appMode) {
       router.push('/viewer');
     }
-  }, [scanData, router]);
+  }, [scanData, appMode, router]);
 
   return (
     <div
@@ -60,6 +104,36 @@ export default function HomePage() {
         >
           See your future form
         </p>
+      </motion.div>
+
+      <motion.div
+        className="w-full max-w-xl relative z-10 mb-8"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, delay: 0.1 }}
+      >
+        <div
+          className="text-center text-[10px] uppercase tracking-[3px] font-mono mb-3"
+          style={{ color: appMode ? 'var(--rc-text-dim)' : 'var(--rc-accent)' }}
+        >
+          {appMode ? 'Mode selected' : 'Select a mode to continue'}
+        </div>
+        <div className="flex gap-3">
+          <ModeButton
+            mode="free"
+            title="FreeCompose"
+            desc="Explore the avatar freely — adjust global body fat and every segment with live metrics."
+            selected={appMode === 'free'}
+            onSelect={setAppMode}
+          />
+          <ModeButton
+            mode="bids"
+            title="BIDS Mode"
+            desc="Go directly to the body image assessment. The avatar is not shown until the tasks begin."
+            selected={appMode === 'bids'}
+            onSelect={setAppMode}
+          />
+        </div>
       </motion.div>
 
       <motion.div
