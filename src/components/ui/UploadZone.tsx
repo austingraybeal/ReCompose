@@ -26,6 +26,7 @@ export default function UploadZone() {
     bodyComp: { label: 'Body Composition CSV', accept: '.csv', description: 'Body fat %, BMI, weight...', content: null, fileName: null },
   });
   const { loadScan } = useScanLoader();
+  const setScanFileName = useScanStore((st) => st.setScanFileName);
   const isLoading = useScanStore((s) => s.isLoading);
   const error = useScanStore((s) => s.error);
   const inputRefs = {
@@ -72,9 +73,10 @@ export default function UploadZone() {
 
     // Auto-load if all three are present
     if (updated.obj.content && updated.coreMeasures.content && updated.bodyComp.content) {
+      setScanFileName(updated.obj.fileName ?? null);
       await loadScan(updated.obj.content, updated.coreMeasures.content, updated.bodyComp.content);
     }
-  }, [files, loadScan]);
+  }, [files, loadScan, setScanFileName]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -99,10 +101,11 @@ export default function UploadZone() {
       setFiles(updated);
 
       if (updated.obj.content && updated.coreMeasures.content && updated.bodyComp.content) {
+        setScanFileName(updated.obj.fileName ?? null);
         loadScan(updated.obj.content, updated.coreMeasures.content, updated.bodyComp.content);
       }
     });
-  }, [files, loadScan]);
+  }, [files, loadScan, setScanFileName]);
 
   const allLoaded = files.obj.content && files.coreMeasures.content && files.bodyComp.content;
   const loadedCount = [files.obj.content, files.coreMeasures.content, files.bodyComp.content].filter(Boolean).length;

@@ -97,6 +97,9 @@ export interface ProjectedMetrics {
   hipCirc: number;
   whr: number;
   /** Per-segment circumferences (cm, right side by default; 0 = not in scan) */
+  shoulderCirc: number;
+  /** Torso volume in liters (0 = not in scan). Scales with circumference squared. */
+  torsoVolumeL: number;
   chestCirc: number;
   bicepCirc: number;
   forearmCirc: number;

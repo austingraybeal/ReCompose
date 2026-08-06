@@ -125,6 +125,36 @@ export function projectMetrics(
   const estimatedHip = projectCircumference(
     originalHip, deltaBF, getRingSensitivity('Hip', sex, androidness), overrides.hips);
 
+  // Shoulder circumference sits between the Collar and OverArm rings —
+  // average their sensitivities.
+  const originalShoulder =
+    measures['ShoulderCircumference'] ?? 0;
+  const shoulderSens =
+    (getRingSensitivity('Collar', sex, androidness) +
+      getRingSensitivity('OverArm', sex, androidness)) / 2;
+  const estimatedShoulder = projectCircumference(
+    originalShoulder, deltaBF, shoulderSens, overrides.shoulders);
+
+  // Torso volume scales as the SQUARE of the mean torso circumference
+  // scale (volume ~ cross-section area x height; height is fixed).
+  const originalTorsoVolCm3 = measures['TorsoVolume'] ?? 0;
+  const torsoRingSens = [
+    getRingSensitivity('Bust', sex, androidness),
+    getRingSensitivity('NarrowWaist', sex, androidness),
+    getRingSensitivity('Hip', sex, androidness),
+  ];
+  const torsoOvs = [overrides.torso, overrides.waist, overrides.hips];
+  let torsoScaleSum = 0;
+  for (let k = 0; k < 3; k++) {
+    torsoScaleSum += softClampScale(
+      (1 + (deltaBF * torsoRingSens[k]) / 100) *
+        (1 + (torsoOvs[k] * SEGMENT_OVERRIDE_STRENGTH) / 100),
+    );
+  }
+  const torsoLinearScale = torsoScaleSum / 3;
+  const estimatedTorsoVolL =
+    (originalTorsoVolCm3 * torsoLinearScale * torsoLinearScale) / 1000;
+
   const originalChest = measures['ChestCircumference'] ?? 0;
   const estimatedChest = projectCircumference(
     originalChest, deltaBF, getRingSensitivity('Bust', sex, androidness), overrides.torso);
@@ -159,6 +189,8 @@ export function projectMetrics(
     waistCirc: r1(estimatedWaist),
     hipCirc: r1(estimatedHip),
     whr: Math.round(estimatedWHR * 100) / 100,
+    shoulderCirc: r1(estimatedShoulder),
+    torsoVolumeL: r1(estimatedTorsoVolL),
     chestCirc: r1(estimatedChest),
     bicepCirc: r1(estimatedBicep),
     forearmCirc: r1(estimatedForearm),

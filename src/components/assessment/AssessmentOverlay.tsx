@@ -25,6 +25,7 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
   const completeAssessment = useAssessmentStore((s) => s.completeAssessment);
 
   const scanData = useScanStore((s) => s.scanData);
+  const scanFileName = useScanStore((s) => s.scanFileName);
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const setGlobalBodyFat = useMorphStore((s) => s.setGlobalBodyFat);
   const resetRegionalOverrides = useMorphStore((s) => s.resetRegionalOverrides);
@@ -52,15 +53,26 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     ) {
       const metrics = scanData.bodyComp;
       const measures = scanData.measures;
+      // Same measure sources as the live metrics panel (the old keys
+      // 'WaistCirc'/'HipCirc' don't exist in scan exports and produced
+      // zeros in the PDF scan summary).
+      const waist =
+        measures['NarrowWaistTapeMeasure'] ?? measures['NarrowWaist'] ??
+        measures['WaistCircumference'] ?? 0;
+      const hip = measures['HipCircumference'] ?? measures['HipWidestCircumference'] ?? 0;
       const actual: ActualMetrics = {
         bodyFat: metrics.bodyFat,
         weight: metrics.weight,
         bmi: metrics.bmi,
-        waistCirc: measures['WaistCirc'] ?? measures['Waist'] ?? 0,
-        hipCirc: measures['HipCirc'] ?? measures['HipWidest'] ?? 0,
-        whr: metrics.waistToHipRatio,
+        waistCirc: waist,
+        hipCirc: hip,
+        whr: metrics.waistToHipRatio || (hip > 0 ? Math.round((waist / hip) * 100) / 100 : 0),
       };
-      completeAssessment(actual, 'scan-' + Date.now());
+      // Scan ID: the upload file name truncated through _AM/_PM when
+      // present (scanner exports embed the capture time that way).
+      const rawName = scanFileName ?? 'scan-' + Date.now();
+      const ampm = rawName.match(/^(.*?_[AP]M)/);
+      completeAssessment(actual, ampm ? ampm[1] : rawName.replace(/\.obj$/i, ''));
     }
   }, [currentStep, assessmentRecord, taskResults, scanData, completeAssessment]);
 

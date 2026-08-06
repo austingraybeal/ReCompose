@@ -1,6 +1,7 @@
 'use client';
 
 import { useMorphStore } from '@/lib/stores/morphStore';
+import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import { useGenderStore } from '@/lib/stores/genderStore';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { computeAndroidness } from '@/lib/morph/sensitivityModel';
@@ -23,6 +24,7 @@ export default function GlobalSlider() {
   const linkMode = useMorphStore((s) => s.linkMode);
   const sex = useGenderStore((s) => s.gender);
   const bodyComp = useScanStore((s) => s.scanData?.bodyComp);
+  const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalBodyFat(parseFloat(e.target.value));
@@ -61,6 +63,19 @@ export default function GlobalSlider() {
             Body Fat
           </div>
         </div>
+        {!isAssessmentMode && Math.round(globalBodyFat) !== Math.round(originalBodyFat) && (
+          <button
+            onClick={() => setGlobalBodyFat(originalBodyFat)}
+            className="mb-2 ml-2 px-3 py-1.5 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
+            style={{
+              background: 'var(--rc-bg-elevated)',
+              color: 'var(--rc-text-secondary)',
+              border: '1px solid var(--rc-border-default)',
+            }}
+          >
+            Reset Global
+          </button>
+        )}
       </div>
 
       <div className="relative">

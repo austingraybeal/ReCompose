@@ -20,7 +20,9 @@ interface ViewState {
 }
 
 export const useViewStore = create<ViewState>((set) => ({
-  wireframe: false,
+  // Wireframe defaults ON in both modes (product decision: the mesh reads
+  // better and BIDS participants see less literal skin detail).
+  wireframe: true,
   ghostOverlay: false,
   segmentHighlight: false,
   cameraPreset: 'front',
