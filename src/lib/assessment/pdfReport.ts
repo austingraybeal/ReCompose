@@ -4,10 +4,14 @@ import {
   interpretDistortion,
   interpretTaskDiscrepancy,
   getTopRegionalChanges,
-  describeRegionalChanges,
+  getDiscrepancySeverity,
+  CLINICAL_THRESHOLD,
+  type DiscrepancySeverity,
 } from './scoring';
+// (describeRegionalChanges superseded by the podium blocks)
 import { getTaskDefinition } from './taskRegistry';
 import type { DerivedRow } from './derivedValues';
+import { computeFigureData } from './figureData';
 
 export interface PDFReportExtras {
   /** Ghost-overlay snapshots captured at each task confirm (data URLs). */
@@ -27,6 +31,18 @@ const TEXT_DIM: RGB = [107, 112, 128];
 const WARM: RGB = [224, 68, 90];
 const COOL: RGB = [74, 200, 232];
 const BORDER: RGB = [38, 42, 56];
+
+/** Severity colors: green (<2 BF%), yellow (2-5), red (>5), symmetric. */
+const SEV_RGB: Record<DiscrepancySeverity, RGB> = {
+  low: [52, 211, 153],
+  moderate: [240, 200, 74],
+  high: [224, 68, 90],
+};
+
+function hexToRgb(hex: string): RGB {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 
 /** Blend the surface color toward warm (positive) or cool (negative). */
 function heatColor(frac: number): RGB {
@@ -150,7 +166,7 @@ export async function generatePDFReport(
     );
     const cellH = imgH + 10; // image + label + pill line
 
-    sectionTitle('TASK AVATARS (ghost = actual body)', cellH + 14);
+    sectionTitle('SUBJECTIVE PERCEPTIONS (ghost = actual body)', cellH + 14);
     for (let rowStart = 0; rowStart < snapTasks.length; rowStart += perRow) {
       const row = snapTasks.slice(rowStart, rowStart + perRow);
       ensureRoom(cellH + 2);
@@ -181,8 +197,7 @@ export async function generatePDFReport(
         const pillLabel = t === 'perceived' ? 'vs actual' : 'vs perceived';
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
-        const sig = Math.abs(pill) >= 1;
-        doc.setTextColor(...(sig ? (pill > 0 ? WARM : COOL) : TEXT_DIM));
+        doc.setTextColor(...SEV_RGB[getDiscrepancySeverity(pill)]);
         doc.text(
           `${pill > 0 ? '+' : ''}${pill.toFixed(1)}% ${pillLabel}`,
           x + imgW / 2,
@@ -195,22 +210,24 @@ export async function generatePDFReport(
     y += 4;
   }
 
-  // ── BIDS scores (tabulated) ──────────────────────────────────────────
+  // ── BIDS scores (tabulated, severity-colored) ────────────────────────
   sectionTitle('BIDS SCORES', 24);
-  const scoreRows: Array<{ label: string; value: number; desc: string; flagged: boolean }> = [
+  const constructName = (t: TaskType): string =>
+    t === 'ideal'
+      ? 'Dissatisfaction'
+      : `Pressure — ${shortLabel(t)}`;
+  const scoreRows: Array<{ label: string; value: number; desc: string }> = [
     {
       label: 'Distortion (Perceived vs Actual)',
       value: scores.distortion,
       desc: interpretDistortion(scores.distortion),
-      flagged: scores.clinicalFlag,
     },
     ...comparisons.map((t) => {
       const d = scores.taskDiscrepancies[t] ?? 0;
       return {
-        label: `${shortLabel(t)} vs Perceived`,
+        label: `${constructName(t)} (vs Perceived)`,
         value: d,
         desc: interpretTaskDiscrepancy(t, d),
-        flagged: false,
       };
     }),
   ];
@@ -228,32 +245,44 @@ export async function generatePDFReport(
   y += 5;
 
   for (const row of scoreRows) {
+    const sev = getDiscrepancySeverity(row.value);
+    const flagged = sev === 'high';
     const descLines = doc.splitTextToSize(
       row.desc,
       contentWidth - scLabelW - scValueW - 2,
     ) as string[];
-    const rowH = Math.max(5, descLines.length * 3.5 + 1.5);
+    // Row height covers the wrapped description AND the flag line, so the
+    // threshold label can never bleed into the next row.
+    const linesTall = Math.max(descLines.length, flagged ? 2 : 1);
+    const rowH = linesTall * 3.5 + 2.5;
     ensureRoom(rowH + 1);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...TEXT_SECONDARY);
     doc.text(row.label, margin + 1.5, y);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...(row.flagged ? WARM : TEXT));
+    doc.setTextColor(...SEV_RGB[sev]);
     doc.text(`${row.value > 0 ? '+' : ''}${row.value.toFixed(1)}`, margin + scLabelW, y);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...TEXT_SECONDARY);
     doc.text(descLines, margin + scLabelW + scValueW, y);
-    if (row.flagged) {
+    if (flagged) {
       doc.setTextColor(...WARM);
       doc.text('exceeds clinical threshold', margin + scLabelW, y + 3.5);
     }
     doc.setDrawColor(...BORDER);
     doc.setLineWidth(0.2);
-    doc.line(margin, y + rowH - 2.5, pageWidth - margin, y + rowH - 2.5);
+    doc.line(margin, y + rowH - 2, pageWidth - margin, y + rowH - 2);
     y += rowH + 1;
   }
-  y += 4;
+  doc.setTextColor(...TEXT_DIM);
+  doc.setFontSize(6);
+  doc.text(
+    'Severity: green <2 BF% (not meaningful) · yellow 2-5 (meaningful) · red >5 (clinical threshold), in either direction.',
+    margin,
+    y,
+  );
+  y += 6;
 
   // ── Assessment results (per-task table, heat-mapped) ─────────────────
   const labelColW = 32;
@@ -275,7 +304,7 @@ export async function generatePDFReport(
 
   const tableRow = (
     label: string,
-    values: Array<{ text: string; heat?: number }>,
+    values: Array<{ text: string; heat?: number; textRgb?: RGB }>,
   ) => {
     ensureRoom(6);
     values.forEach((v, i) => {
@@ -286,8 +315,10 @@ export async function generatePDFReport(
     });
     doc.setTextColor(...TEXT_SECONDARY);
     doc.text(label, margin, y);
-    doc.setTextColor(...TEXT);
-    values.forEach((v, i) => doc.text(v.text, colX(i), y));
+    values.forEach((v, i) => {
+      doc.setTextColor(...(v.textRgb ?? TEXT));
+      doc.text(v.text, colX(i), y);
+    });
     y += 5;
   };
 
@@ -301,7 +332,10 @@ export async function generatePDFReport(
     'Displacement',
     tasks.map((t) => {
       const d = t === 'perceived' ? scores.distortion : (scores.taskDiscrepancies[t] ?? 0);
-      return { text: `${d > 0 ? '+' : ''}${d.toFixed(1)}%`, heat: d / 10 };
+      return {
+        text: `${d > 0 ? '+' : ''}${d.toFixed(1)}%`,
+        textRgb: SEV_RGB[getDiscrepancySeverity(d)],
+      };
     }),
   );
   for (const sd of scores.segmentDistortions) {
@@ -316,37 +350,85 @@ export async function generatePDFReport(
   doc.setTextColor(...TEXT_DIM);
   doc.setFontSize(6);
   doc.text(
-    'Displacement: perceived is vs actual; all other tasks are vs perceived. Cell color intensity tracks magnitude (warm = larger, cool = smaller).',
+    'Displacement: perceived is vs actual; others vs perceived, colored by severity (green <2, yellow 2-5, red >5 BF%). Segment cells: warm = larger, cool = smaller.',
     margin,
     y,
   );
   y += 8;
 
-  // ── Regional interpretation: top changes + threshold callouts ────────
-  sectionTitle('REGIONAL DISTORTION SUMMARY', 24);
-  doc.setTextColor(...TEXT_SECONDARY);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
+  // ── Regional distortion summary: podium blocks per comparison ────────
+  {
+    const podiums = [
+      {
+        title: 'Perceived vs Actual',
+        highlights: getTopRegionalChanges(scores.segmentDistortions, (sd) => sd.perceivedDelta),
+      },
+      ...comparisons.map((t) => ({
+        title: `${shortLabel(t)} vs Perceived`,
+        highlights: getTopRegionalChanges(scores.segmentDistortions, (sd) => sd.taskDeltas[t]),
+      })),
+    ];
 
-  const regionalBlocks: string[] = [
-    describeRegionalChanges(
-      getTopRegionalChanges(scores.segmentDistortions, (sd) => sd.perceivedDelta),
-      'perceived vs actual',
-    ),
-    ...comparisons.map((t) =>
-      describeRegionalChanges(
-        getTopRegionalChanges(scores.segmentDistortions, (sd) => sd.taskDeltas[t]),
-        `${shortLabel(t).toLowerCase()} vs perceived`,
-      ),
-    ),
-  ];
-  for (const block of regionalBlocks) {
-    const lines = doc.splitTextToSize(block, contentWidth) as string[];
-    ensureRoom(lines.length * 4 + 2);
-    doc.text(lines, margin, y);
-    y += lines.length * 4 + 2;
+    const gap = 5;
+    const blockW = (contentWidth - gap) / 2;
+    const maxRows = Math.max(1, ...podiums.map((p) => p.highlights.length));
+    const blockH = 8 + maxRows * 4.5 + 2;
+
+    sectionTitle('REGIONAL DISTORTION SUMMARY', blockH + 14);
+    for (let rowStart = 0; rowStart < podiums.length; rowStart += 2) {
+      const row = podiums.slice(rowStart, rowStart + 2);
+      ensureRoom(blockH + 3);
+      const rowWidth = row.length * blockW + (row.length - 1) * gap;
+      const startX = margin + (contentWidth - rowWidth) / 2; // center remainder
+      row.forEach((p, i) => {
+        const x = startX + i * (blockW + gap);
+        doc.setFillColor(...SURFACE);
+        doc.rect(x, y, blockW, blockH, 'F');
+        doc.setDrawColor(...BORDER);
+        doc.setLineWidth(0.25);
+        doc.rect(x, y, blockW, blockH, 'S');
+
+        doc.setTextColor(...ACCENT);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.text(p.title, x + 3, y + 5);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        let ry = y + 10;
+        if (p.highlights.length === 0) {
+          doc.setTextColor(...TEXT_DIM);
+          doc.text('No regional change', x + 3, ry);
+        }
+        p.highlights.forEach((h, rank) => {
+          const over = h.exceedsThreshold;
+          doc.setTextColor(...TEXT_DIM);
+          doc.text(`${rank + 1}.`, x + 3, ry);
+          doc.setTextColor(...TEXT_SECONDARY);
+          doc.text(h.label, x + 8, ry);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...(over ? WARM : Math.abs(h.delta) >= 2 ? SEV_RGB.moderate : TEXT));
+          doc.text(
+            `${h.delta > 0 ? '+' : ''}${h.delta.toFixed(1)}%${over ? ' !' : ''}`,
+            x + blockW - 3,
+            ry,
+            { align: 'right' },
+          );
+          doc.setFont('helvetica', 'normal');
+          ry += 4.5;
+        });
+      });
+      y += blockH + 3;
+    }
+    doc.setTextColor(...TEXT_DIM);
+    doc.setFontSize(6);
+    doc.text(
+      `Top regional changes per comparison (largest first; ! = exceeds the ${CLINICAL_THRESHOLD.toFixed(0)}% clinical threshold).`,
+      margin,
+      y,
+    );
+    y += 8;
   }
-  y += 4;
 
   // ── Implied measurements (heat-mapped vs actual) ─────────────────────
   const derived = extras.derived ?? [];
@@ -394,7 +476,7 @@ export async function generatePDFReport(
     doc.setTextColor(...TEXT_DIM);
     doc.setFontSize(6);
     doc.text(
-      'Real-world values each avatar state implies, from the same projection model as the live metrics panel. Color = deviation from actual.',
+      'Real-world values each avatar state corresponds to, using the live data. Color = deviation from actual.',
       margin,
       y,
     );
@@ -426,118 +508,324 @@ export async function generatePDFReport(
   behaviorRow('Adjustments', (t) => `${scores.trajectories[t]?.totalAdjustments ?? 0}`);
   behaviorRow('Path length', (t) => (scores.trajectories[t]?.totalPathLength ?? 0).toFixed(1));
   behaviorRow('Reversals', (t) => `${scores.trajectories[t]?.totalDirectionReversals ?? 0}`);
+  behaviorRow('Visits', (t) =>
+    `${scores.trajectories[t]?.perControl.reduce((sum, c) => sum + c.visitCount, 0) ?? 0}`);
   behaviorRow('Revisits', (t) => `${scores.trajectories[t]?.totalRevisits ?? 0}`);
+  behaviorRow('Peak overshoot', (t) =>
+    Math.max(0, ...(scores.trajectories[t]?.perControl.map((c) => c.overshootMagnitude) ?? [0])).toFixed(1));
   behaviorRow('Longest dwell', (t) => scores.trajectories[t]?.longestDwellControl ?? '-');
   behaviorRow('First control', (t) => scores.trajectories[t]?.engagementOrder[0] ?? '-');
   ensureRoom(6);
   doc.setTextColor(...TEXT_DIM);
   doc.setFontSize(6);
   doc.text(
-    `Total assessment duration: ${formatDuration(scores.totalAssessmentDuration)}. Path length = total slider travel; reversals = direction changes; revisits = returns to a previously adjusted control.`,
+    `Total assessment duration: ${formatDuration(scores.totalAssessmentDuration)}.`,
     margin,
     y,
   );
-  y += 8;
+  y += 4;
 
-  // ── Adjustment trajectory figures ────────────────────────────────────
-  const chartH = 26;
-  const axisPad = 12;
-  sectionTitle('ADJUSTMENT TRAJECTORY', chartH + 20);
-  doc.setFontSize(6);
-  doc.setFont('helvetica', 'normal');
-
-  for (const t of tasks) {
-    const result = record.tasks[t]!;
-    const events = result.adjustmentTrajectory;
-    const durationMs = Math.max(result.durationMs, 1);
-
-    ensureRoom(chartH + 14);
-
-    // Chart frame
-    const x0 = margin + axisPad;
-    const chartW = contentWidth - axisPad;
-    doc.setTextColor(...TEXT);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    doc.text(shortLabel(t), margin, y);
-    y += 3;
-
-    doc.setFillColor(...SURFACE);
-    doc.rect(x0, y, chartW, chartH, 'F');
-    doc.setDrawColor(...BORDER);
-    doc.setLineWidth(0.25);
-    doc.rect(x0, y, chartW, chartH, 'S');
-
-    // Global BF series: step line starting at actual BF
-    const globalEvents = events.filter((e) => e.control === 'global');
-    const series: Array<{ ms: number; v: number }> = [
-      { ms: 0, v: record.actual.bodyFat },
-      ...globalEvents.map((e) => ({ ms: e.timestamp, v: e.value })),
-    ];
-    let vMin = Math.min(...series.map((s) => s.v));
-    let vMax = Math.max(...series.map((s) => s.v));
-    if (vMax - vMin < 2) {
-      const mid = (vMax + vMin) / 2;
-      vMin = mid - 1;
-      vMax = mid + 1;
-    }
-    const pad = (vMax - vMin) * 0.12;
-    vMin -= pad;
-    vMax += pad;
-
-    const px = (ms: number) => x0 + (Math.min(ms, durationMs) / durationMs) * chartW;
-    const py = (v: number) => y + chartH - ((v - vMin) / (vMax - vMin)) * (chartH - 6) - 3;
-
-    // Actual-BF reference line
-    doc.setDrawColor(...TEXT_DIM);
-    doc.setLineWidth(0.15);
-    const refY = py(record.actual.bodyFat);
-    for (let dx = 0; dx < chartW; dx += 3) {
-      doc.line(x0 + dx, refY, x0 + Math.min(dx + 1.5, chartW), refY);
-    }
-
-    // Step line for global BF
-    doc.setDrawColor(...ACCENT);
-    doc.setLineWidth(0.5);
-    for (let i = 0; i < series.length; i++) {
-      const cur = series[i];
-      const nextMs = i + 1 < series.length ? series[i + 1].ms : durationMs;
-      doc.line(px(cur.ms), py(cur.v), px(nextMs), py(cur.v)); // horizontal hold
-      if (i + 1 < series.length) {
-        doc.line(px(nextMs), py(cur.v), px(nextMs), py(series[i + 1].v)); // vertical step
-      }
-    }
-
-    // Segment adjustment events as ticks along the bottom strip
-    doc.setDrawColor(...COOL);
-    doc.setLineWidth(0.4);
-    for (const e of events) {
-      if (e.control === 'global') continue;
-      const ex = px(e.timestamp);
-      doc.line(ex, y + chartH - 2.5, ex, y + chartH - 0.5);
-    }
-
-    // Axis labels
+  const BEHAVIOR_DEFS = [
+    'Adjustments: total number of slider movements made during the task - overall engagement effort; how much active searching the judgment required rather than direct retrieval of a stable appearance.',
+    'Path length: total distance the sliders traveled, regardless of where they ended - breadth of the search through body-size space; exploration cost of reaching the final judgment.',
+    'Reversals: number of direction changes within a slider (up-down-up) - indecision near the answer; oscillation around the subjective answer while localizing it.',
+    'Visits: number of separate times the participant came to a slider (leaving for another slider ends a visit) - how attentional allocation is spread across body regions.',
+    'Revisits: times a slider was left and later returned to (visits - 1) - failure of answers to stay settled; slider-based analog of body-checking.',
+    'Longest dwell: the slider engaged for the greatest span of time - the region of peak attentional hold; typically the most difficult or personally significant area to judge.',
+    'Engagement order: sequence in which sliders were first touched - priority structure of the body representation; which regions are most immediately self-relevant.',
+    'Overshooting: distance traveled beyond final answer before coming back - level of uncertainty around internal representation.',
+  ];
+  for (const def of BEHAVIOR_DEFS) {
+    const lines = doc.splitTextToSize(def, contentWidth) as string[];
+    ensureRoom(lines.length * 2.8 + 1);
     doc.setTextColor(...TEXT_DIM);
-    doc.setFontSize(5.5);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${vMax.toFixed(0)}%`, x0 - 1.5, y + 3.5, { align: 'right' });
-    doc.text(`${vMin.toFixed(0)}%`, x0 - 1.5, y + chartH - 1, { align: 'right' });
-    doc.text('0s', x0, y + chartH + 3);
-    doc.text(`${Math.round(durationMs / 1000)}s`, x0 + chartW, y + chartH + 3, {
-      align: 'right',
-    });
-    y += chartH + 7;
+    doc.setFontSize(6);
+    doc.text(lines, margin, y);
+    y += lines.length * 2.8 + 0.8;
   }
-  ensureRoom(6);
-  doc.setTextColor(...TEXT_DIM);
-  doc.setFontSize(6);
-  doc.text(
-    'Solid line: global BF% over time (dashed = actual). Blue ticks: segment slider adjustments.',
-    margin,
-    y,
-  );
-  y += 8;
+  y += 5;
+
+  // ── Figures ──────────────────────────────────────────────────────────
+  {
+    const fig = computeFigureData(record, scores, derived);
+
+    sectionTitle('FIGURES', 30);
+
+    // Adaptive headline
+    doc.setTextColor(...TEXT);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    const headLines = doc.splitTextToSize(fig.headline, contentWidth) as string[];
+    ensureRoom(headLines.length * 3.8 + 4);
+    doc.text(headLines, margin, y);
+    y += headLines.length * 3.8 + 5;
+    doc.setFont('helvetica', 'normal');
+
+    const figTitle = (n: number, title: string) => {
+      doc.setTextColor(...TEXT);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Fig ${n} — ${title}`, margin, y);
+      doc.setFont('helvetica', 'normal');
+      y += 4;
+    };
+    const mix = (a: RGB, b: RGB, t: number): RGB => [
+      Math.round(a[0] + (b[0] - a[0]) * t),
+      Math.round(a[1] + (b[1] - a[1]) * t),
+      Math.round(a[2] + (b[2] - a[2]) * t),
+    ];
+
+    // Fig 1 — column chart: global BF% per state
+    {
+      const h = 32;
+      const axisPad = 10;
+      ensureRoom(h + 18);
+      figTitle(1, 'Global body fat by state (%)');
+      const x0 = margin + axisPad;
+      const w = contentWidth - axisPad;
+      const vMax = Math.max(10, ...fig.bfColumns.map((c) => c.value)) * 1.18;
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.25);
+      doc.line(x0, y + h, x0 + w, y + h); // baseline
+      doc.line(x0, y, x0, y + h); // y axis
+      doc.setTextColor(...TEXT_DIM);
+      doc.setFontSize(5.5);
+      doc.text(`${vMax.toFixed(0)}`, x0 - 1.5, y + 3, { align: 'right' });
+      doc.text('0', x0 - 1.5, y + h, { align: 'right' });
+
+      const n = fig.bfColumns.length;
+      const slot = w / n;
+      const barW = Math.min(16, slot * 0.55);
+      fig.bfColumns.forEach((c, i) => {
+        const bx = x0 + slot * i + (slot - barW) / 2;
+        const barH = (c.value / vMax) * h;
+        doc.setFillColor(...hexToRgb(c.color));
+        doc.rect(bx, y + h - barH, barW, barH, 'F');
+        doc.setTextColor(...TEXT);
+        doc.setFontSize(6);
+        doc.text(`${c.value.toFixed(1)}`, bx + barW / 2, y + h - barH - 1.2, { align: 'center' });
+        doc.setTextColor(...TEXT_DIM);
+        doc.setFontSize(5.5);
+        doc.text(c.label, bx + barW / 2, y + h + 3.2, { align: 'center' });
+      });
+      y += h + 9;
+    }
+
+    // Fig 2 — radar: 8-segment profile per perspective
+    {
+      const R = 23;
+      const blockH = R * 2 + 16;
+      ensureRoom(blockH + 12);
+      figTitle(2, 'Regional profile across perspectives (segment overrides, -15 to +15)');
+      const cx = margin + 34;
+      const cy = y + R + 6;
+      const nAxes = fig.radarAxes.length;
+      const angle = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / nAxes;
+      const pt = (i: number, v: number): [number, number] => {
+        const r = ((v + 15) / 30) * R;
+        return [cx + Math.cos(angle(i)) * r, cy + Math.sin(angle(i)) * r];
+      };
+
+      // Grid rings at -7.5, 0 (bold), +7.5, +15
+      for (const level of [-7.5, 0, 7.5, 15]) {
+        doc.setDrawColor(...(level === 0 ? TEXT_DIM : BORDER));
+        doc.setLineWidth(level === 0 ? 0.3 : 0.2);
+        for (let i = 0; i < nAxes; i++) {
+          const [ax, ay] = pt(i, level);
+          const [bx, by] = pt((i + 1) % nAxes, level);
+          doc.line(ax, ay, bx, by);
+        }
+      }
+      // Axes + labels
+      doc.setFontSize(5);
+      for (let i = 0; i < nAxes; i++) {
+        const [ex, ey] = pt(i, 15);
+        doc.setDrawColor(...BORDER);
+        doc.setLineWidth(0.15);
+        doc.line(cx, cy, ex, ey);
+        const [lx, ly] = [cx + Math.cos(angle(i)) * (R + 3), cy + Math.sin(angle(i)) * (R + 3)];
+        doc.setTextColor(...TEXT_DIM);
+        const alignRight = Math.cos(angle(i)) < -0.3;
+        const alignCenter = Math.abs(Math.cos(angle(i))) <= 0.3;
+        doc.text(fig.radarAxes[i], lx, ly + 1, {
+          align: alignCenter ? 'center' : alignRight ? 'right' : 'left',
+        });
+      }
+      // Series polygons
+      for (const s of fig.radarSeries) {
+        doc.setDrawColor(...hexToRgb(s.color));
+        doc.setLineWidth(0.45);
+        for (let i = 0; i < nAxes; i++) {
+          const [ax, ay] = pt(i, s.values[i]);
+          const [bx, by] = pt((i + 1) % nAxes, s.values[(i + 1) % nAxes]);
+          doc.line(ax, ay, bx, by);
+        }
+        doc.setFillColor(...hexToRgb(s.color));
+        for (let i = 0; i < nAxes; i++) {
+          const [ax, ay] = pt(i, s.values[i]);
+          doc.circle(ax, ay, 0.5, 'F');
+        }
+      }
+      // Legend on the right
+      let ly = y + 4;
+      const lx = cx + R + 26;
+      doc.setFontSize(6);
+      for (const s of fig.radarSeries) {
+        doc.setFillColor(...hexToRgb(s.color));
+        doc.rect(lx, ly - 1.8, 3, 2.2, 'F');
+        doc.setTextColor(...TEXT_SECONDARY);
+        doc.text(s.label, lx + 4.5, ly);
+        ly += 4.5;
+      }
+      doc.setTextColor(...TEXT_DIM);
+      doc.setFontSize(5.5);
+      doc.text('Middle ring = 0 (no change); outer = +15, center = -15.', lx, ly + 1);
+      y += blockH + 4;
+    }
+
+    // Fig 3 — horizontal bars: desired change per measurement (% of actual)
+    if (fig.desiredChange) {
+      const rows = fig.desiredChange.rows;
+      const rowH = 5;
+      const h = rows.length * rowH;
+      ensureRoom(h + 18);
+      figTitle(3, `Desired change vs actual — ${fig.desiredChange.taskLabel} (% of actual)`);
+      const labelW = 26;
+      const half = (contentWidth - labelW) / 2 - 12;
+      const xc = margin + labelW + half + 6;
+      const maxAbs = Math.max(5, ...rows.map((r) => Math.abs(r.pct)));
+
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.25);
+      doc.line(xc, y - 1, xc, y + h - 1); // zero line
+      rows.forEach((r, i) => {
+        const ry = y + i * rowH + 1.8;
+        doc.setTextColor(...TEXT_SECONDARY);
+        doc.setFontSize(6);
+        doc.text(r.label, margin, ry + 1);
+        const barLen = (Math.abs(r.pct) / maxAbs) * half;
+        doc.setFillColor(...ACCENT);
+        if (r.pct >= 0) {
+          doc.rect(xc, ry - 1, Math.max(0.3, barLen), 2.6, 'F');
+        } else {
+          doc.rect(xc - barLen, ry - 1, Math.max(0.3, barLen), 2.6, 'F');
+        }
+        doc.setTextColor(...TEXT);
+        doc.setFontSize(5.5);
+        doc.text(
+          `${r.pct > 0 ? '+' : ''}${r.pct.toFixed(1)}%`,
+          r.pct >= 0 ? xc + barLen + 1.5 : xc - barLen - 1.5,
+          ry + 0.8,
+          { align: r.pct >= 0 ? 'left' : 'right' },
+        );
+      });
+      y += h + 7;
+    }
+
+    // Fig 4 — combo: time on task (bars) vs adjustments + path length (lines)
+    {
+      const h = 30;
+      const axisPad = 10;
+      ensureRoom(h + 22);
+      figTitle(4, 'Time on task vs adjustments and path length');
+      const x0 = margin + axisPad;
+      const w = contentWidth - axisPad * 2;
+      const tMax = Math.max(10, ...fig.effort.map((e) => e.durationS)) * 1.2;
+      const sMax = Math.max(
+        5,
+        ...fig.effort.map((e) => e.adjustments),
+        ...fig.effort.map((e) => e.pathLength),
+      ) * 1.15;
+
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.25);
+      doc.line(x0, y + h, x0 + w, y + h);
+      doc.line(x0, y, x0, y + h);
+      doc.line(x0 + w, y, x0 + w, y + h);
+      doc.setTextColor(...TEXT_DIM);
+      doc.setFontSize(5.5);
+      doc.text(`${Math.round(tMax)}s`, x0 - 1.5, y + 3, { align: 'right' });
+      doc.text('0', x0 - 1.5, y + h, { align: 'right' });
+      doc.text(`${Math.round(sMax)}`, x0 + w + 1.5, y + 3);
+      doc.text('0', x0 + w + 1.5, y + h);
+
+      const n = fig.effort.length;
+      const slot = w / n;
+      const barW = Math.min(14, slot * 0.5);
+      const centers: number[] = [];
+      fig.effort.forEach((e, i) => {
+        const bx = x0 + slot * i + (slot - barW) / 2;
+        centers.push(bx + barW / 2);
+        const barH = (e.durationS / tMax) * h;
+        doc.setFillColor(...hexToRgb(e.color));
+        doc.rect(bx, y + h - barH, barW, barH, 'F');
+        doc.setTextColor(...TEXT_DIM);
+        doc.setFontSize(5.5);
+        doc.text(e.label, bx + barW / 2, y + h + 3.2, { align: 'center' });
+      });
+      // Secondary-axis lines
+      const lineY = (v: number) => y + h - (v / sMax) * h;
+      doc.setDrawColor(...TEXT);
+      doc.setLineWidth(0.4);
+      for (let i = 1; i < n; i++) {
+        doc.line(centers[i - 1], lineY(fig.effort[i - 1].adjustments), centers[i], lineY(fig.effort[i].adjustments));
+      }
+      doc.setFillColor(...TEXT);
+      fig.effort.forEach((e, i) => doc.circle(centers[i], lineY(e.adjustments), 0.6, 'F'));
+      doc.setDrawColor(...COOL);
+      doc.setLineDashPattern([1.4, 1.2], 0);
+      for (let i = 1; i < n; i++) {
+        doc.line(centers[i - 1], lineY(fig.effort[i - 1].pathLength), centers[i], lineY(fig.effort[i].pathLength));
+      }
+      doc.setLineDashPattern([], 0);
+      doc.setFillColor(...COOL);
+      fig.effort.forEach((e, i) => doc.circle(centers[i], lineY(e.pathLength), 0.6, 'F'));
+
+      doc.setTextColor(...TEXT_DIM);
+      doc.setFontSize(5.5);
+      doc.text(
+        'Bars: seconds on task (left axis, task colors). Solid line: adjustments; dashed line: path length (right axis).',
+        margin,
+        y + h + 7,
+      );
+      y += h + 11;
+    }
+
+    // Fig 5 — heatmap: adjustments per control x task
+    {
+      const labelW = 22;
+      const cellW = (contentWidth - labelW) / fig.heatControls.length;
+      const cellH = 6;
+      const h = 5 + fig.heatTasks.length * cellH;
+      ensureRoom(h + 16);
+      figTitle(5, 'Adjustments per control × task');
+      doc.setFontSize(5);
+      doc.setTextColor(...TEXT_DIM);
+      fig.heatControls.forEach((c, i) => {
+        doc.text(c, margin + labelW + cellW * i + cellW / 2, y + 2, { align: 'center' });
+      });
+      y += 4;
+      fig.heatTasks.forEach((t, ti) => {
+        doc.setTextColor(...TEXT_SECONDARY);
+        doc.setFontSize(6);
+        doc.text(t.label, margin, y + cellH / 2 + 1);
+        fig.heatCounts[ti].forEach((count, ci) => {
+          const cellX = margin + labelW + cellW * ci;
+          const intensity = (count / fig.heatMax) * 0.85;
+          doc.setFillColor(...mix(SURFACE, ACCENT, intensity));
+          doc.rect(cellX + 0.3, y + 0.3, cellW - 0.6, cellH - 0.6, 'F');
+          doc.setTextColor(...(intensity > 0.45 ? BG : TEXT_SECONDARY));
+          doc.setFontSize(5.5);
+          doc.text(`${count}`, cellX + cellW / 2, y + cellH / 2 + 1, { align: 'center' });
+        });
+        y += cellH;
+      });
+      doc.setTextColor(...TEXT_DIM);
+      doc.setFontSize(5.5);
+      doc.text('Cell intensity scales with adjustment count.', margin, y + 3.5);
+      y += 8;
+    }
+  }
 
   // ── Footer ───────────────────────────────────────────────────────────
   ensureRoom(20);

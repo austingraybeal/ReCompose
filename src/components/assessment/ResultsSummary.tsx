@@ -18,6 +18,7 @@ import {
 import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 import { computeDerivedValues } from '@/lib/assessment/derivedValues';
+import ResultFigures from './ResultFigures';
 import type { BIDSScores, TaskType, SegmentDistortion } from '@/types/assessment';
 
 function ScoreCard({
@@ -485,6 +486,9 @@ export default function ResultsSummary() {
             </table>
           </div>
         )}
+
+        {/* Five assessment figures + adaptive headline */}
+        <ResultFigures record={record} scores={scores} derived={derived} />
 
         {/* Behavioral metrics for the selected view */}
         <div

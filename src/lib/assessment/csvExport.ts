@@ -47,8 +47,9 @@ export function generateCSVExport(
       `${t}_traj_adjustments`,
       `${t}_traj_path_length`,
       `${t}_traj_reversals`,
+      `${t}_traj_visits`,
       `${t}_traj_revisits`,
-      `${t}_traj_engagement_order`,
+      `${t}_traj_peak_overshoot`,
       `${t}_traj_longest_dwell_control`,
     ]),
     'clinical_flag',
@@ -78,13 +79,16 @@ export function generateCSVExport(
     ...tasks.map((t) => record.tasks[t]!.resetCount),
     ...tasks.flatMap((t) => {
       const m = scores.trajectories[t];
-      if (!m) return [0, '0', 0, 0, '""', ''];
+      if (!m) return [0, '0', 0, 0, 0, '0', ''];
+      const visits = m.perControl.reduce((sum, c) => sum + c.visitCount, 0);
+      const peakOvershoot = Math.max(0, ...m.perControl.map((c) => c.overshootMagnitude));
       return [
         m.totalAdjustments,
         m.totalPathLength.toFixed(2),
         m.totalDirectionReversals,
+        visits,
         m.totalRevisits,
-        `"${m.engagementOrder.join('>')}"`,
+        peakOvershoot.toFixed(2),
         m.longestDwellControl ?? '',
       ];
     }),
@@ -121,6 +125,28 @@ export function generateCSVExport(
         ].join(','),
       );
     }
+  }
+
+  // Engagement order matrix: one row per task, one column per control,
+  // cell = the rank at which the control was first touched ('untouched'
+  // when it was never moved).
+  lines.push('');
+  lines.push('# engagement_order');
+  lines.push(['task', 'task_label', 'global', ...SEGMENT_ORDER].join(','));
+  for (const t of tasks) {
+    const traj = scores.trajectories[t];
+    const rank = (control: string): string => {
+      const c = traj?.perControl.find((p) => p.control === control);
+      return c && c.firstTouchOrder > 0 ? String(c.firstTouchOrder) : 'untouched';
+    };
+    lines.push(
+      [
+        t,
+        `"${getTaskDefinition(t).shortLabel}"`,
+        rank('global'),
+        ...SEGMENT_ORDER.map((id) => rank(id)),
+      ].join(','),
+    );
   }
 
   // Section 2: per-control trajectory metrics (long format)
