@@ -6,17 +6,12 @@ import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import type { TaskType } from '@/types/assessment';
 import type { SegmentId } from '@/types/scan';
+import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 
 interface TaskControlsProps {
   taskType: TaskType;
   onCaptureSnapshot: () => string | undefined;
 }
-
-const CONFIRM_LABELS: Record<TaskType, string> = {
-  perceived: 'Confirm Perceived Body',
-  ideal: 'Confirm Ideal Body',
-  partner: 'Confirm Partner Preference',
-};
 
 export default function TaskControls({ taskType, onCaptureSnapshot }: TaskControlsProps) {
   const [, setConfirmed] = useState(false);
@@ -116,7 +111,7 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
         onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(62, 207, 180, 0.4)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(62, 207, 180, 0.25)'; }}
       >
-        {CONFIRM_LABELS[taskType]}
+        {getTaskDefinition(taskType).confirmLabel}
       </motion.button>
     </div>
   );

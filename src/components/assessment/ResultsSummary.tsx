@@ -5,10 +5,10 @@ import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import {
   formatDuration,
   interpretDistortion,
-  interpretDissatisfaction,
-  interpretPartnerDiscrepancy,
+  interpretTaskDiscrepancy,
   interpretRegionalDistortion,
 } from '@/lib/assessment/scoring';
+import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 import type { BIDSScores } from '@/types/assessment';
 
 function ScoreCard({
@@ -104,6 +104,8 @@ export default function ResultsSummary() {
   if (!record) return null;
 
   const { scores } = record;
+  const tasks = record.selectedTasks;
+  const comparisons = tasks.filter((t) => t !== 'perceived');
 
   return (
     <motion.div
@@ -119,7 +121,7 @@ export default function ResultsSummary() {
             Assessment Complete
           </div>
           <h2 className="font-mono font-bold text-xl" style={{ color: 'var(--rc-text-primary)' }}>
-            Body Image Assessment Results
+            BIDS Assessment Results
           </h2>
         </div>
 
@@ -146,24 +148,25 @@ export default function ResultsSummary() {
           </div>
         )}
 
-        {/* Snapshots */}
-        {(snapshots.perceived || snapshots.ideal || snapshots.partner) && (
-          <div className="grid grid-cols-3 gap-3 mb-8">
-            {(['perceived', 'ideal', 'partner'] as const).map((key) => {
+        {/* Snapshots — one per administered task; remainder rows centered */}
+        {tasks.some((t) => snapshots[t]) && (
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {tasks.map((key) => {
               const snap = snapshots[key];
-              const labels = { perceived: 'Perceived', ideal: 'Ideal', partner: 'Partner' };
+              const def = getTaskDefinition(key);
+              const highlight = key === 'ideal';
               return (
-                <div key={key} className="text-center">
+                <div key={key} className="text-center" style={{ width: 'calc(33.333% - 0.5rem)' }}>
                   <div
                     className="rounded-xl overflow-hidden mb-2 aspect-[3/4]"
                     style={{
                       background: 'var(--rc-bg-surface)',
-                      border: key === 'ideal' ? '2px solid var(--rc-accent)' : '1px solid var(--rc-border-default)',
+                      border: highlight ? '2px solid var(--rc-accent)' : '1px solid var(--rc-border-default)',
                     }}
                   >
                     {snap ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={snap} alt={labels[key]} className="w-full h-full object-cover" />
+                      <img src={snap} alt={def.shortLabel} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
                         No capture
@@ -171,10 +174,10 @@ export default function ResultsSummary() {
                     )}
                   </div>
                   <span
-                    className="text-[10px] uppercase tracking-[2px] font-mono"
-                    style={{ color: key === 'ideal' ? 'var(--rc-accent)' : 'var(--rc-text-dim)' }}
+                    className="text-[12px] uppercase tracking-[2px] font-mono font-bold"
+                    style={{ color: highlight ? 'var(--rc-accent)' : 'var(--rc-text-secondary)' }}
                   >
-                    {labels[key]}
+                    {def.shortLabel}
                   </span>
                 </div>
               );
@@ -182,7 +185,7 @@ export default function ResultsSummary() {
           </div>
         )}
 
-        {/* Score cards */}
+        {/* Score cards: distortion + every selected comparison vs perceived */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
           <ScoreCard
             label="Body Image Distortion (BIDS-D)"
@@ -190,18 +193,19 @@ export default function ResultsSummary() {
             interpretation={interpretDistortion(scores.distortion)}
             severity={getSeverity(scores.distortionMagnitude)}
           />
-          <ScoreCard
-            label="Dissatisfaction (BIDS-S)"
-            value={`${scores.dissatisfaction > 0 ? '+' : ''}${scores.dissatisfaction.toFixed(1)}%`}
-            interpretation={interpretDissatisfaction(scores.dissatisfaction)}
-            severity={getSeverity(scores.dissatisfactionMagnitude)}
-          />
-          <ScoreCard
-            label="Partner Discrepancy (BIDS-P)"
-            value={`${scores.partnerDiscrepancy > 0 ? '+' : ''}${scores.partnerDiscrepancy.toFixed(1)}%`}
-            interpretation={interpretPartnerDiscrepancy(scores.partnerDiscrepancy)}
-            severity={getSeverity(Math.abs(scores.partnerDiscrepancy))}
-          />
+          {comparisons.map((t) => {
+            const d = scores.taskDiscrepancies[t] ?? 0;
+            const def = getTaskDefinition(t);
+            return (
+              <ScoreCard
+                key={t}
+                label={`${def.shortLabel} vs Perceived`}
+                value={`${d > 0 ? '+' : ''}${d.toFixed(1)}%`}
+                interpretation={interpretTaskDiscrepancy(t, d)}
+                severity={getSeverity(Math.abs(d))}
+              />
+            );
+          })}
         </div>
 
         {/* Regional distortion breakdown */}
@@ -223,9 +227,9 @@ export default function ResultsSummary() {
           </div>
         </div>
 
-        {/* Three-column table */}
+        {/* Per-task table */}
         <div
-          className="rounded-xl overflow-hidden mb-8"
+          className="rounded-xl overflow-x-auto mb-8"
           style={{
             background: 'var(--rc-bg-surface)',
             border: '1px solid var(--rc-border-default)',
@@ -235,42 +239,35 @@ export default function ResultsSummary() {
             <thead>
               <tr style={{ background: 'var(--rc-bg-elevated)' }}>
                 <th className="text-left px-4 py-3" style={{ color: 'var(--rc-text-dim)' }}></th>
-                <th className="text-right px-4 py-3" style={{ color: 'var(--rc-text-dim)' }}>Perceived</th>
-                <th className="text-right px-4 py-3" style={{ color: 'var(--rc-text-dim)' }}>Ideal</th>
-                <th className="text-right px-4 py-3" style={{ color: 'var(--rc-text-dim)' }}>Partner</th>
+                {tasks.map((t) => (
+                  <th key={t} className="text-right px-4 py-3" style={{ color: 'var(--rc-text-dim)' }}>
+                    {getTaskDefinition(t).shortLabel}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               <tr style={{ borderTop: '1px solid var(--rc-border-subtle)' }}>
                 <td className="px-4 py-2.5" style={{ color: 'var(--rc-text-secondary)' }}>Global BF%</td>
-                <td className="text-right px-4 py-2.5 tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
-                  {record.tasks.perceived.finalState.globalBodyFat.toFixed(1)}%
-                </td>
-                <td className="text-right px-4 py-2.5 tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
-                  {record.tasks.ideal.finalState.globalBodyFat.toFixed(1)}%
-                </td>
-                <td className="text-right px-4 py-2.5 tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
-                  {record.tasks.partner.finalState.globalBodyFat.toFixed(1)}%
-                </td>
+                {tasks.map((t) => (
+                  <td key={t} className="text-right px-4 py-2.5 tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
+                    {record.tasks[t]!.finalState.globalBodyFat.toFixed(1)}%
+                  </td>
+                ))}
               </tr>
               {scores.segmentDistortions.map((sd) => (
                 <tr key={sd.segmentId} style={{ borderTop: '1px solid var(--rc-border-subtle)' }}>
                   <td className="px-4 py-2.5" style={{ color: 'var(--rc-text-secondary)' }}>{sd.label}</td>
-                  <td className="text-right px-4 py-2.5 tabular-nums" style={{
-                    color: sd.perceivedDelta !== 0 ? 'var(--rc-text-primary)' : 'var(--rc-text-dim)',
-                  }}>
-                    {sd.perceivedDelta > 0 ? '+' : ''}{sd.perceivedDelta.toFixed(0)}%
-                  </td>
-                  <td className="text-right px-4 py-2.5 tabular-nums" style={{
-                    color: sd.idealDelta !== 0 ? 'var(--rc-text-primary)' : 'var(--rc-text-dim)',
-                  }}>
-                    {sd.idealDelta > 0 ? '+' : ''}{sd.idealDelta.toFixed(0)}%
-                  </td>
-                  <td className="text-right px-4 py-2.5 tabular-nums" style={{
-                    color: sd.partnerDelta !== 0 ? 'var(--rc-text-primary)' : 'var(--rc-text-dim)',
-                  }}>
-                    {sd.partnerDelta > 0 ? '+' : ''}{sd.partnerDelta.toFixed(0)}%
-                  </td>
+                  {tasks.map((t) => {
+                    const v = record.tasks[t]!.finalState.segmentOverrides[sd.segmentId];
+                    return (
+                      <td key={t} className="text-right px-4 py-2.5 tabular-nums" style={{
+                        color: v !== 0 ? 'var(--rc-text-primary)' : 'var(--rc-text-dim)',
+                      }}>
+                        {v > 0 ? '+' : ''}{v.toFixed(0)}%
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -289,9 +286,14 @@ export default function ResultsSummary() {
             Behavioral Metrics
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <BehaviorStat label="Perceived" value={formatDuration(scores.perceivedTaskDuration)} sub={`${record.tasks.perceived.resetCount} resets`} />
-            <BehaviorStat label="Ideal" value={formatDuration(scores.idealTaskDuration)} sub={`${record.tasks.ideal.resetCount} resets`} />
-            <BehaviorStat label="Partner" value={formatDuration(scores.partnerTaskDuration)} sub={`${record.tasks.partner.resetCount} resets`} />
+            {tasks.map((t) => (
+              <BehaviorStat
+                key={t}
+                label={getTaskDefinition(t).shortLabel}
+                value={formatDuration(scores.taskDurations[t] ?? 0)}
+                sub={`${record.tasks[t]!.resetCount} resets`}
+              />
+            ))}
             <BehaviorStat label="Total" value={formatDuration(scores.totalAssessmentDuration)} sub="total time" />
           </div>
         </div>

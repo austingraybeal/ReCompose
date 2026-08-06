@@ -1,28 +1,25 @@
 'use client';
 
 import type { AssessmentStep, TaskType } from '@/types/assessment';
-
-const STEPS: { key: TaskType; label: string }[] = [
-  { key: 'perceived', label: 'Perceived' },
-  { key: 'ideal', label: 'Ideal' },
-  { key: 'partner', label: 'Partner' },
-];
+import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 
 interface ProgressBarProps {
   currentStep: AssessmentStep;
+  selectedTasks: TaskType[];
   completedTasks: Set<TaskType>;
 }
 
-export default function ProgressBar({ currentStep, completedTasks }: ProgressBarProps) {
+export default function ProgressBar({ currentStep, selectedTasks, completedTasks }: ProgressBarProps) {
   return (
     <div className="flex items-center gap-2 px-4 py-2">
-      {STEPS.map((step, i) => {
-        const isActive = currentStep === step.key;
-        const isComplete = completedTasks.has(step.key);
-        const isPast = isComplete || (currentStep === 'complete');
+      {selectedTasks.map((task, i) => {
+        const isActive = currentStep === task;
+        const isComplete = completedTasks.has(task);
+        const isPast = isComplete || currentStep === 'complete';
+        const label = getTaskDefinition(task).shortLabel;
 
         return (
-          <div key={step.key} className="flex items-center gap-2 flex-1">
+          <div key={task} className="flex items-center gap-2 flex-1 min-w-0">
             {/* Step indicator */}
             <div className="flex items-center gap-2 min-w-0">
               <div
@@ -60,12 +57,12 @@ export default function ProgressBar({ currentStep, completedTasks }: ProgressBar
                   color: isActive ? 'var(--rc-accent)' : isPast ? 'var(--rc-text-secondary)' : 'var(--rc-text-dim)',
                 }}
               >
-                {step.label}
+                {label}
               </span>
             </div>
 
             {/* Connector line */}
-            {i < STEPS.length - 1 && (
+            {i < selectedTasks.length - 1 && (
               <div
                 className="flex-1 h-px min-w-4"
                 style={{

@@ -20,6 +20,7 @@ interface AssessmentOverlayProps {
 export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps) {
   const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
   const currentStep = useAssessmentStore((s) => s.currentStep);
+  const selectedTasks = useAssessmentStore((s) => s.selectedTasks);
   const taskResults = useAssessmentStore((s) => s.taskResults);
   const assessmentRecord = useAssessmentStore((s) => s.assessmentRecord);
   const completeAssessment = useAssessmentStore((s) => s.completeAssessment);
@@ -41,14 +42,13 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     }
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-complete assessment when all tasks done
+  // Auto-complete assessment when all selected tasks are done
+  const allDone = selectedTasks.every((t) => !!taskResults[t]);
   useEffect(() => {
     if (
       currentStep === 'complete' &&
       !assessmentRecord &&
-      taskResults.perceived &&
-      taskResults.ideal &&
-      taskResults.partner &&
+      allDone &&
       scanData
     ) {
       const metrics = scanData.bodyComp;
@@ -74,7 +74,7 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
       const ampm = rawName.match(/^(.*?_[AP]M)/);
       completeAssessment(actual, ampm ? ampm[1] : rawName.replace(/\.obj$/i, ''));
     }
-  }, [currentStep, assessmentRecord, taskResults, scanData, completeAssessment]);
+  }, [currentStep, assessmentRecord, allDone, scanData, completeAssessment, scanFileName]);
 
   // Capture canvas snapshot — find the WebGL canvas in the DOM
   const captureSnapshot = useCallback((): string | undefined => {
@@ -90,10 +90,9 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
 
   if (!isAssessmentMode) return null;
 
-  const completedTasks = new Set<TaskType>();
-  if (taskResults.perceived) completedTasks.add('perceived');
-  if (taskResults.ideal) completedTasks.add('ideal');
-  if (taskResults.partner) completedTasks.add('partner');
+  const completedTasks = new Set<TaskType>(
+    selectedTasks.filter((t) => !!taskResults[t]),
+  );
 
   // Welcome screen
   if (currentStep === 'welcome') {
@@ -123,13 +122,14 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     );
   }
 
-  // Guard: only render task UI for valid task types
-  if (currentStep !== 'perceived' && currentStep !== 'ideal' && currentStep !== 'partner') {
+  // Guard: only render task UI for a selected task step
+  if (!selectedTasks.includes(currentStep as TaskType)) {
     return null;
   }
 
   // Active task
-  const taskType = currentStep;
+  const taskType = currentStep as TaskType;
+  const taskIndex = selectedTasks.indexOf(taskType);
 
   return (
     <AnimatePresence>
@@ -138,8 +138,8 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
         <div className="pointer-events-auto" style={{
           background: 'linear-gradient(to bottom, rgba(10, 11, 15, 0.9) 0%, transparent 100%)',
         }}>
-          <ProgressBar currentStep={currentStep!} completedTasks={completedTasks} />
-          <InstructionCard taskType={taskType} />
+          <ProgressBar currentStep={currentStep!} selectedTasks={selectedTasks} completedTasks={completedTasks} />
+          <InstructionCard taskType={taskType} taskIndex={taskIndex} taskCount={selectedTasks.length} />
         </div>
 
         {/* Spacer — pass clicks through to 3D viewer */}
