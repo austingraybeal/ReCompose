@@ -10,7 +10,7 @@ import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 
 interface TaskControlsProps {
   taskType: TaskType;
-  onCaptureSnapshot: () => Promise<string | undefined>;
+  onCaptureSnapshot: () => Promise<{ ghost?: string; plain?: string }>;
 }
 
 export default function TaskControls({ taskType, onCaptureSnapshot }: TaskControlsProps) {
@@ -38,13 +38,14 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
 
   const handleConfirmClick = useCallback(async () => {
     // Single-click confirm (double-confirmation removed by design).
-    const snapshot = await onCaptureSnapshot();
+    const { ghost, plain } = await onCaptureSnapshot();
     confirmTask(
       {
         globalBodyFat,
         segmentOverrides: { ...segmentOverrides } as Record<SegmentId, number>,
       },
-      snapshot
+      ghost,
+      plain
     );
     setConfirmed(true);
     // Reset sliders to actual for next task

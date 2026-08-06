@@ -37,7 +37,8 @@ export const useViewStore = create<ViewState>((set) => ({
   segmentHighlight: false,
   cameraPreset: 'front',
   hoveredSegment: null,
-  regionalPanelOpen: false,
+  // Segments panel starts open in both modes so all sliders are visible.
+  regionalPanelOpen: true,
   focusedSegment: null,
 
   setAppMode: (mode) => set({ appMode: mode }),

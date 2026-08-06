@@ -117,7 +117,8 @@ const BEHAVIOR_LEGEND: Array<[string, string]> = [
 
 export default function ResultsSummary() {
   const record = useAssessmentStore((s) => s.assessmentRecord);
-  const snapshots = useAssessmentStore((s) => s.snapshots);
+  const ghostSnapshots = useAssessmentStore((s) => s.snapshots);
+  const plainSnapshots = useAssessmentStore((s) => s.snapshotsPlain);
   const resetAssessment = useAssessmentStore((s) => s.resetAssessment);
   const scanData = useScanStore((s) => s.scanData);
   const sex = useGenderStore((s) => s.gender);
@@ -127,6 +128,12 @@ export default function ResultsSummary() {
     ? 'ideal'
     : (tasks.find((t) => t !== 'perceived') ?? 'perceived');
   const [selectedView, setSelectedView] = useState<TaskType>(defaultView);
+  // Ghost shell on the result images — defaults on; falls back to the
+  // ghost captures when a plain capture is missing.
+  const [showGhostImages, setShowGhostImages] = useState(true);
+  const snapshots = showGhostImages
+    ? ghostSnapshots
+    : { ...ghostSnapshots, ...plainSnapshots };
 
   const derived = useMemo(
     () => (record && scanData ? computeDerivedValues(record, scanData, sex) : []),
@@ -252,8 +259,23 @@ export default function ResultsSummary() {
             );
           })}
         </div>
-        <div className="text-center text-rc-xs mb-8" style={{ color: 'var(--rc-text-dim)' }}>
-          Click an image to explore its regional and behavioral results.
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <span className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+            Click an image to explore its regional and behavioral results.
+          </span>
+          <button
+            onClick={() => setShowGhostImages((v) => !v)}
+            className="px-3 py-1 rounded-full text-rc-xs font-mono transition-all duration-150"
+            style={{
+              background: showGhostImages ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
+              color: showGhostImages ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+              border: showGhostImages
+                ? '1px solid rgba(168, 98, 248, 0.3)'
+                : '1px solid var(--rc-border-default)',
+            }}
+          >
+            Ghost {showGhostImages ? 'On' : 'Off'}
+          </button>
         </div>
 
         {/* Score cards: distortion + every selected comparison vs perceived */}

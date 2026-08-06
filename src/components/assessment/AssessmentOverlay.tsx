@@ -77,24 +77,40 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     }
   }, [currentStep, assessmentRecord, allDone, scanData, completeAssessment, scanFileName]);
 
-  // Capture canvas snapshot with the ghost overlay forced ON, so every
-  // task image shows the adjusted body against the original wireframe.
-  const captureSnapshot = useCallback(async (): Promise<string | undefined> => {
+  // Capture two canvas snapshots per confirm: one with the actual-body
+  // ghost shell and one without, so the results page can toggle the ghost
+  // on the static images after the fact.
+  const captureSnapshot = useCallback(async (): Promise<{
+    ghost?: string;
+    plain?: string;
+  }> => {
     try {
       const canvas = canvasRef?.current ?? document.querySelector('canvas');
-      if (!canvas) return undefined;
-      const view = useViewStore.getState();
-      const hadGhost = view.ghostOverlay;
-      if (!hadGhost) view.toggleGhostOverlay();
-      // Wait two frames so the ghost renders before reading pixels.
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
-      const url = canvas.toDataURL('image/png');
-      if (!hadGhost) useViewStore.getState().toggleGhostOverlay();
-      return url;
+      if (!canvas) return {};
+
+      const waitFrames = () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
+      const setGhost = (on: boolean) => {
+        const view = useViewStore.getState();
+        if (view.ghostOverlay !== on) view.toggleGhostOverlay();
+      };
+
+      const hadGhost = useViewStore.getState().ghostOverlay;
+
+      setGhost(false);
+      await waitFrames();
+      const plain = canvas.toDataURL('image/png');
+
+      setGhost(true);
+      await waitFrames();
+      const ghost = canvas.toDataURL('image/png');
+
+      setGhost(hadGhost);
+      return { ghost, plain };
     } catch {
-      return undefined;
+      return {};
     }
   }, [canvasRef]);
 
