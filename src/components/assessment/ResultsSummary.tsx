@@ -511,9 +511,13 @@ function BehaviorStat({ label, value, sub }: { label: string; value: string; sub
 }
 
 function DownloadPDFButton({ record, scores }: { record: import('@/types/assessment').AssessmentRecord; scores: BIDSScores }) {
+  const snapshots = useAssessmentStore((s) => s.snapshots);
+  const scanData = useScanStore((s) => s.scanData);
+  const sex = useGenderStore((s) => s.gender);
   const handleClick = async () => {
     const { generatePDFReport } = await import('@/lib/assessment/pdfReport');
-    generatePDFReport(record, scores);
+    const derived = scanData ? computeDerivedValues(record, scanData, sex) : undefined;
+    generatePDFReport(record, scores, { snapshots, derived });
   };
   return (
     <button
