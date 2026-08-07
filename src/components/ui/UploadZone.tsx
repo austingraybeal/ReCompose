@@ -219,6 +219,12 @@ export default function UploadZone() {
         </motion.div>
       )}
 
+      {/* Client-side privacy — a headline differentiator, stated plainly */}
+      <div className="mt-4 text-center">
+        <p className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+          Processed entirely on this device — no scan data is ever transmitted.
+        </p>
+      </div>
     </div>
   );
 }
