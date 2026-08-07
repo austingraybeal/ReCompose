@@ -24,6 +24,7 @@ import {
   SEGMENT_MEAN_SENSITIVITY_FEMALE,
   SEGMENT_MEAN_SENSITIVITY_MALE,
 } from '@/lib/constants/segmentDefs';
+import { coefficientRegistry } from './coefficientRegistry';
 
 export type Sex = BodyGender;
 
@@ -224,6 +225,9 @@ const WHR_ANDROID = 0.95;
  * Pass undefined WHR (or <= 0) to fall back to the sex archetype alone.
  */
 export function computeAndroidness(sex: Sex, whr?: number): number {
+  // Research-mode manual override (undefined = computed, the default).
+  const manual = coefficientRegistry.overrides.androidness;
+  if (manual !== undefined) return Math.min(1, Math.max(0, manual));
   const prior = sex === 'male' ? 1 : sex === 'female' ? 0 : 0.5;
   if (whr === undefined || !(whr > 0)) return prior;
   const measured = Math.min(
@@ -247,12 +251,14 @@ export function getRingSensitivity(
   sex: Sex,
   androidness?: number,
 ): number {
+  const ov = coefficientRegistry.overrides;
+  const gain = ov.gain ?? SENSITIVITY_GAIN;
   if (androidness === undefined) {
-    return (RING_TABLES[sex][ringName] ?? 0) * SENSITIVITY_GAIN;
+    return (RING_TABLES[sex][ringName] ?? 0) * gain;
   }
-  const f = RING_SENSITIVITY_FEMALE[ringName] ?? 0;
-  const m = RING_SENSITIVITY_MALE[ringName] ?? 0;
-  return lerp(f, m, androidness) * SENSITIVITY_GAIN;
+  const f = ov.ringFemale?.[ringName] ?? RING_SENSITIVITY_FEMALE[ringName] ?? 0;
+  const m = ov.ringMale?.[ringName] ?? RING_SENSITIVITY_MALE[ringName] ?? 0;
+  return lerp(f, m, androidness) * gain;
 }
 
 /** Look up sensitivity for an arm sub-segment (upper_arm or forearm). */
@@ -261,12 +267,14 @@ export function getArmSensitivity(
   sex: Sex,
   androidness?: number,
 ): number {
+  const ov = coefficientRegistry.overrides;
+  const gain = ov.gain ?? SENSITIVITY_GAIN;
   if (androidness === undefined) {
-    return ARM_SENSITIVITY_TABLE[sex][subSegment] * SENSITIVITY_GAIN;
+    return ARM_SENSITIVITY_TABLE[sex][subSegment] * gain;
   }
-  const f = ARM_SENSITIVITY_TABLE.female[subSegment];
-  const m = ARM_SENSITIVITY_TABLE.male[subSegment];
-  return lerp(f, m, androidness) * SENSITIVITY_GAIN;
+  const f = ov.armFemale?.[subSegment] ?? ARM_SENSITIVITY_TABLE.female[subSegment];
+  const m = ov.armMale?.[subSegment] ?? ARM_SENSITIVITY_TABLE.male[subSegment];
+  return lerp(f, m, androidness) * gain;
 }
 
 /**
@@ -278,22 +286,36 @@ export function getSegmentMeanSensitivity(
   sex: Sex,
   androidness?: number,
 ): number {
+  const gain = coefficientRegistry.overrides.gain ?? SENSITIVITY_GAIN;
   if (androidness === undefined) {
     const tables = {
       neutral: SEGMENT_MEAN_SENSITIVITY_UNISEX,
       female: SEGMENT_MEAN_SENSITIVITY_FEMALE,
       male: SEGMENT_MEAN_SENSITIVITY_MALE,
     } as const;
-    return tables[sex][segment] * SENSITIVITY_GAIN;
+    return tables[sex][segment] * gain;
   }
   const f = SEGMENT_MEAN_SENSITIVITY_FEMALE[segment];
   const m = SEGMENT_MEAN_SENSITIVITY_MALE[segment];
-  return lerp(f, m, androidness) * SENSITIVITY_GAIN;
+  return lerp(f, m, androidness) * gain;
 }
 
 // ─── Backwards-compatible exports ──────────────────────────────────────────
 // Keep the legacy non-sex-aware symbols so older call sites keep compiling
 // until they migrate to getRingSensitivity / getArmSensitivity.
+
+/**
+ * Published (default) coefficient values, exposed read-only for the
+ * research panel UI. These are the untouched literature-calibrated
+ * tables — the override registry never mutates them.
+ */
+export const PUBLISHED_COEFFICIENTS = Object.freeze({
+  gain: SENSITIVITY_GAIN,
+  ringFemale: RING_SENSITIVITY_FEMALE,
+  ringMale: RING_SENSITIVITY_MALE,
+  armFemale: ARM_SENSITIVITY_TABLE.female,
+  armMale: ARM_SENSITIVITY_TABLE.male,
+});
 
 /** @deprecated Use {@link getRingSensitivity}(name, sex) instead. */
 export const RING_SENSITIVITY: Record<string, number> = { ...RING_SENSITIVITY_NEUTRAL };

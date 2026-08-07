@@ -4,6 +4,7 @@ import ToggleBar from '@/components/ui/ToggleBar';
 import BrandLogo from '@/components/ui/BrandLogo';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import { useCoefficientStore } from '@/lib/stores/coefficientStore';
 
 export default function Header() {
   const hasScan = useScanStore((s) => !!s.scanData);
@@ -29,6 +30,8 @@ export default function Header() {
 
       <div className="flex items-center gap-3">
         {hasScan && !isAssessmentMode && <ToggleBar />}
+
+        {hasScan && !isAssessmentMode && <ResearchButton />}
 
         {hasScan && (
           isAssessmentMode ? (
@@ -60,5 +63,31 @@ export default function Header() {
         )}
       </div>
     </header>
+  );
+}
+
+/** Opens the coefficient panel; amber when a tuned profile is active. */
+function ResearchButton() {
+  const panelOpen = useCoefficientStore((s) => s.panelOpen);
+  const setPanelOpen = useCoefficientStore((s) => s.setPanelOpen);
+  const tuned = useCoefficientStore((s) => Object.keys(s.overrides).length > 0);
+  return (
+    <button
+      onClick={() => setPanelOpen(!panelOpen)}
+      className="px-3.5 py-1.5 rounded-full text-rc-xs font-mono tracking-wide transition-all duration-200"
+      style={{
+        background: tuned
+          ? 'rgba(240, 200, 74, 0.12)'
+          : panelOpen
+            ? 'rgba(168, 98, 248, 0.15)'
+            : 'var(--rc-bg-elevated)',
+        color: tuned ? '#f0c84a' : panelOpen ? 'var(--rc-accent)' : 'var(--rc-text-secondary)',
+        border: tuned
+          ? '1px solid rgba(240, 200, 74, 0.35)'
+          : '1px solid var(--rc-border-default)',
+      }}
+    >
+      Research{tuned ? ' ●' : ''}
+    </button>
   );
 }

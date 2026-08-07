@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useGenderStore } from '@/lib/stores/genderStore';
+import { useCoefficientStore } from '@/lib/stores/coefficientStore';
 import { projectMetrics } from '@/lib/morph/metricProjection';
 import { computeAndroidness } from '@/lib/morph/sensitivityModel';
 import type { ProjectedMetrics, SegmentOverrides } from '@/types/scan';
@@ -27,6 +28,8 @@ export function useMetricProjection(): {
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
   const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
   const sex = useGenderStore((s) => s.gender);
+  // Research-mode coefficient edits invalidate both memos.
+  const coeffVersion = useCoefficientStore((s) => s.version);
 
   const metrics = useMemo(() => {
     if (!scanData) return null;
@@ -40,7 +43,7 @@ export function useMetricProjection(): {
       sex,
       computeAndroidness(sex, scanData.bodyComp?.waistToHipRatio),
     );
-  }, [scanData, originalBodyFat, globalBodyFat, segmentOverrides, sex]);
+  }, [scanData, originalBodyFat, globalBodyFat, segmentOverrides, sex, coeffVersion]);
 
   const originalMetrics = useMemo(() => {
     if (!scanData) return null;
@@ -54,7 +57,7 @@ export function useMetricProjection(): {
       sex,
       computeAndroidness(sex, scanData.bodyComp?.waistToHipRatio),
     );
-  }, [scanData, originalBodyFat, sex]);
+  }, [scanData, originalBodyFat, sex, coeffVersion]);
 
   return { metrics, originalMetrics };
 }

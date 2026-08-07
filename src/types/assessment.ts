@@ -94,6 +94,12 @@ export interface AssessmentRecord {
   /** Researcher-entered participant/session identifier (optional). */
   participantId?: string;
 
+  /**
+   * Coefficient profile active during this assessment: 'default' for the
+   * published model, or a tuned-profile hash from the research panel.
+   */
+  coefficientProfile?: string;
+
   actual: ActualMetrics;
 
   /** Tasks administered in this assessment, in administration order. */

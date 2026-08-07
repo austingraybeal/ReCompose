@@ -839,7 +839,11 @@ export async function generatePDFReport(
 
   doc.setTextColor(...TEXT_DIM);
   doc.setFontSize(6);
-  doc.text('Assessment conducted using ReCompose BIDS Assessment Protocol v1.0', margin, y);
+  doc.text(
+    `Assessment conducted using ReCompose BIDS Assessment Protocol v1.0  |  Coefficient profile: ${record.coefficientProfile ?? 'default'}`,
+    margin,
+    y,
+  );
   y += 3.5;
   doc.text('This report is generated for research/clinical purposes. BIDS thresholds are preliminary and subject to validation.', margin, y);
   y += 3.5;

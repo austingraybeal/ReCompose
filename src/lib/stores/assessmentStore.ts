@@ -15,6 +15,7 @@ import {
   DEFAULT_SELECTED_TASKS,
   getTaskDefinition,
 } from '@/lib/assessment/taskRegistry';
+import { coefficientProfileHash } from '@/lib/morph/coefficientRegistry';
 
 interface AssessmentState {
   // Flow state
@@ -214,6 +215,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       timestamp: new Date().toISOString(),
       scanId,
       ...(participantId.trim() ? { participantId: participantId.trim() } : {}),
+      coefficientProfile: coefficientProfileHash(),
       actual,
       selectedTasks: order,
       tasks: { ...taskResults },

@@ -44,6 +44,7 @@ export function generateCSVExport(
     ...tasks.map((t) => `${t}_duration_ms`),
     'total_duration_ms',
     ...tasks.map((t) => `${t}_resets`),
+    'coefficient_profile',
     ...tasks.flatMap((t) => [
       `${t}_traj_adjustments`,
       `${t}_traj_path_length`,
@@ -79,6 +80,7 @@ export function generateCSVExport(
     ...tasks.map((t) => scores.taskDurations[t] ?? 0),
     scores.totalAssessmentDuration,
     ...tasks.map((t) => record.tasks[t]!.resetCount),
+    `"${record.coefficientProfile ?? 'default'}"`,
     ...tasks.flatMap((t) => {
       const m = scores.trajectories[t];
       if (!m) return [0, '0', 0, 0, 0, '0', ''];

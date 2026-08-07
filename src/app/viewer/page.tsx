@@ -7,6 +7,7 @@ import { useViewStore } from '@/lib/stores/viewStore';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import Header from '@/components/layout/Header';
 import ViewerLayout from '@/components/layout/ViewerLayout';
+import ResearchPanel from '@/components/ui/ResearchPanel';
 
 export default function ViewerPage() {
   const router = useRouter();
@@ -50,9 +51,10 @@ export default function ViewerPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col" style={{ background: 'var(--rc-bg-primary)' }}>
+    <div className="h-screen flex flex-col relative" style={{ background: 'var(--rc-bg-primary)' }}>
       <Header />
       <ViewerLayout />
+      <ResearchPanel />
     </div>
   );
 }
