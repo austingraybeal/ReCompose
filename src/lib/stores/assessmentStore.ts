@@ -39,6 +39,12 @@ interface AssessmentState {
   /** Researcher-entered participant/session ID (optional). */
   participantId: string;
 
+  /** Administer the sociocultural exposure module after the tasks. */
+  includeSociocultural: boolean;
+  socioculturalResult:
+    | import('@/lib/assessment/socioculturalItems').SocioculturalResult
+    | null;
+
   /** Implied-measurement rows carried by a loaded session file, so the
       results view can render without the original scan present. */
   sessionDerived: import('@/lib/assessment/derivedValues').DerivedRow[] | null;
@@ -56,6 +62,10 @@ interface AssessmentState {
   toggleTask: (task: TaskType) => void;
   toggleShowValues: () => void;
   setParticipantId: (id: string) => void;
+  toggleSociocultural: () => void;
+  submitSociocultural: (
+    result: import('@/lib/assessment/socioculturalItems').SocioculturalResult,
+  ) => void;
   /** Hydrate the store from a saved session file (results-only view). */
   hydrateSession: (payload: {
     record: AssessmentRecord;
@@ -94,11 +104,19 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   resetCount: 0,
   showValues: false,
   participantId: '',
+  includeSociocultural: true,
+  socioculturalResult: null,
   sessionDerived: null,
   snapshotSets: {},
   assessmentRecord: null,
 
   setParticipantId: (id) => set({ participantId: id }),
+
+  toggleSociocultural: () =>
+    set((s) => ({ includeSociocultural: !s.includeSociocultural })),
+
+  submitSociocultural: (result) =>
+    set({ socioculturalResult: result, currentStep: 'complete' }),
 
   hydrateSession: ({ record, snapshotSets, derived }) =>
     set({
@@ -120,6 +138,8 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       adjustmentTrajectory: [],
       resetCount: 0,
       showValues: false,
+      includeSociocultural: true,
+      socioculturalResult: null,
       snapshotSets: {},
       assessmentRecord: null,
     }),
@@ -179,7 +199,12 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
     };
 
     const idx = order.indexOf(taskType);
-    const nextStep: AssessmentStep = idx < order.length - 1 ? order[idx + 1] : 'complete';
+    const nextStep: AssessmentStep =
+      idx < order.length - 1
+        ? order[idx + 1]
+        : get().includeSociocultural
+          ? 'sociocultural'
+          : 'complete';
     set({
       taskResults: { ...taskResults, [taskType]: result },
       snapshotSets: { ...snapshotSets, ...(snaps ? { [taskType]: snaps } : {}) },
@@ -205,7 +230,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   },
 
   completeAssessment: (actual, scanId) => {
-    const { taskResults, selectedTasks, participantId } = get();
+    const { taskResults, selectedTasks, participantId, socioculturalResult } = get();
     const order = orderedSelection(selectedTasks);
     if (!order.every((t) => taskResults[t])) return;
 
@@ -220,6 +245,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       selectedTasks: order,
       tasks: { ...taskResults },
       scores,
+      ...(socioculturalResult ? { sociocultural: socioculturalResult } : {}),
     };
 
     set({ assessmentRecord: record, currentStep: 'complete' });
@@ -235,6 +261,8 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       adjustmentTrajectory: [],
       resetCount: 0,
       showValues: false,
+      includeSociocultural: true,
+      socioculturalResult: null,
       snapshotSets: {},
       assessmentRecord: null,
     }),

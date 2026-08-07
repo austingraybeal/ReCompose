@@ -107,7 +107,10 @@ export interface AssessmentRecord {
   tasks: Partial<Record<TaskType, TaskResult>>;
 
   scores: BIDSScores;
+
+  /** Sociocultural exposure module result, when administered. */
+  sociocultural?: import('@/lib/assessment/socioculturalItems').SocioculturalResult;
 }
 
 /** Assessment flow step for the state machine */
-export type AssessmentStep = TaskType | 'welcome' | 'complete';
+export type AssessmentStep = TaskType | 'welcome' | 'sociocultural' | 'complete';

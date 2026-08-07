@@ -548,6 +548,46 @@ export async function generatePDFReport(
   }
   y += 5;
 
+  // ── Sociocultural exposure module (when administered) ────────────────
+  if (record.sociocultural) {
+    const socio = record.sociocultural;
+    sectionTitle('SOCIOCULTURAL EXPOSURE', 26);
+    const subs: Array<[string, number]> = [
+      ['Appearance-content exposure', socio.subscales.exposure],
+      ['Appearance comparison', socio.subscales.comparison],
+      ['Photo editing / filters', socio.subscales.editing],
+      ['Appearance engagement', socio.subscales.engagement],
+      ['Total', socio.subscales.total],
+    ];
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    for (const [label, value] of subs) {
+      ensureRoom(5);
+      doc.setTextColor(...TEXT_SECONDARY);
+      doc.text(label, margin, y);
+      // subscale bar (1-5 scale)
+      const barX = margin + 52;
+      const barW = 50;
+      doc.setFillColor(...SURFACE);
+      doc.rect(barX, y - 2.6, barW, 3.4, 'F');
+      doc.setFillColor(...ACCENT);
+      doc.rect(barX, y - 2.6, Math.max(0.5, ((value - 1) / 4) * barW), 3.4, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...TEXT);
+      doc.text(value ? value.toFixed(2) : '-', barX + barW + 4, y);
+      doc.setFont('helvetica', 'normal');
+      y += 5;
+    }
+    doc.setTextColor(...TEXT_DIM);
+    doc.setFontSize(6);
+    doc.text(
+      `Subscale means, 1 (never) to 5 (always). Module duration: ${formatDuration(socio.durationMs)}. Full item responses are in the CSV export.`,
+      margin,
+      y,
+    );
+    y += 8;
+  }
+
   // ── Figures ──────────────────────────────────────────────────────────
   {
     const fig = computeFigureData(record, scores, derived);

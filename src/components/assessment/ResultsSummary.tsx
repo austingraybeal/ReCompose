@@ -520,6 +520,46 @@ export default function ResultsSummary() {
           </div>
         )}
 
+        {/* Sociocultural exposure subscales (when administered) */}
+        {record.sociocultural && (
+          <div
+            className="p-5 rounded-xl mb-8"
+            style={{ background: 'var(--rc-bg-surface)', border: '1px solid var(--rc-border-default)' }}
+          >
+            <div className="text-[10px] uppercase tracking-[2px] font-mono mb-3" style={{ color: 'var(--rc-text-dim)' }}>
+              Sociocultural Exposure
+            </div>
+            {([
+              ['Appearance-content exposure', record.sociocultural.subscales.exposure],
+              ['Appearance comparison', record.sociocultural.subscales.comparison],
+              ['Photo editing / filters', record.sociocultural.subscales.editing],
+              ['Appearance engagement', record.sociocultural.subscales.engagement],
+              ['Total', record.sociocultural.subscales.total],
+            ] as Array<[string, number]>).map(([label, value]) => (
+              <div key={label} className="flex items-center gap-3 py-1.5">
+                <span className="text-rc-xs font-mono w-52 shrink-0" style={{ color: 'var(--rc-text-secondary)' }}>
+                  {label}
+                </span>
+                <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--rc-bg-primary)' }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.max(2, ((value - 1) / 4) * 100)}%`,
+                      background: 'linear-gradient(90deg, var(--rc-accent), #4d1979)',
+                    }}
+                  />
+                </div>
+                <span className="text-rc-xs font-mono w-10 text-right tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
+                  {value ? value.toFixed(2) : '—'}
+                </span>
+              </div>
+            ))}
+            <div className="mt-2 text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+              Subscale means, 1 (never) to 5 (always). Item-level responses are included in the CSV export.
+            </div>
+          </div>
+        )}
+
         {/* Five assessment figures + adaptive headline */}
         <ResultFigures record={record} scores={scores} derived={derived} selectedView={selectedView} />
 

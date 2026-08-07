@@ -16,8 +16,10 @@ export default function WelcomeScreen() {
   const toggleTask = useAssessmentStore((s) => s.toggleTask);
   const participantId = useAssessmentStore((s) => s.participantId);
   const setParticipantId = useAssessmentStore((s) => s.setParticipantId);
+  const includeSociocultural = useAssessmentStore((s) => s.includeSociocultural);
+  const toggleSociocultural = useAssessmentStore((s) => s.toggleSociocultural);
 
-  const minutes = selectedTasks.length; // 1 minute per selected task
+  const minutes = selectedTasks.length + (includeSociocultural ? 1 : 0); // ~1 min each
   const selectedInOrder = TASK_DEFINITIONS.filter((d) => selectedTasks.includes(d.id));
 
   const categories = ['core', 'social', 'athlete'] as const;
@@ -137,6 +139,37 @@ export default function WelcomeScreen() {
             );
           })}
         </div>
+
+        {/* Sociocultural exposure module toggle */}
+        <button
+          onClick={toggleSociocultural}
+          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg mb-4 transition-all duration-150"
+          style={{
+            background: includeSociocultural ? 'rgba(168, 98, 248, 0.08)' : 'var(--rc-bg-surface)',
+            border: includeSociocultural
+              ? '1px solid rgba(168, 98, 248, 0.3)'
+              : '1px solid var(--rc-border-subtle)',
+          }}
+        >
+          <div className="text-left">
+            <div className="text-rc-sm font-medium" style={{ color: 'var(--rc-text-primary)' }}>
+              Media & Appearance questions
+            </div>
+            <div className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+              Short questionnaire after the tasks (~1 min)
+            </div>
+          </div>
+          <span
+            className="px-2.5 py-1 rounded-full text-rc-xs font-mono shrink-0"
+            style={{
+              background: includeSociocultural ? 'rgba(168, 98, 248, 0.15)' : 'var(--rc-bg-elevated)',
+              color: includeSociocultural ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+              border: '1px solid var(--rc-border-default)',
+            }}
+          >
+            {includeSociocultural ? 'On' : 'Off'}
+          </span>
+        </button>
 
         {/* Optional participant / session ID for research exports */}
         <div className="mb-4">

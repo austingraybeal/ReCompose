@@ -1,6 +1,7 @@
 import type { AssessmentRecord, BIDSScores } from '@/types/assessment';
 import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
 import { getTaskDefinition } from './taskRegistry';
+import { SOCIO_ITEMS } from './socioculturalItems';
 import type { DerivedRow } from './derivedValues';
 
 /**
@@ -45,6 +46,11 @@ export function generateCSVExport(
     'total_duration_ms',
     ...tasks.map((t) => `${t}_resets`),
     'coefficient_profile',
+    'socio_exposure',
+    'socio_comparison',
+    'socio_editing',
+    'socio_engagement',
+    'socio_total',
     ...tasks.flatMap((t) => [
       `${t}_traj_adjustments`,
       `${t}_traj_path_length`,
@@ -81,6 +87,11 @@ export function generateCSVExport(
     scores.totalAssessmentDuration,
     ...tasks.map((t) => record.tasks[t]!.resetCount),
     `"${record.coefficientProfile ?? 'default'}"`,
+    record.sociocultural?.subscales.exposure ?? '',
+    record.sociocultural?.subscales.comparison ?? '',
+    record.sociocultural?.subscales.editing ?? '',
+    record.sociocultural?.subscales.engagement ?? '',
+    record.sociocultural?.subscales.total ?? '',
     ...tasks.flatMap((t) => {
       const m = scores.trajectories[t];
       if (!m) return [0, '0', 0, 0, 0, '0', ''];
@@ -194,6 +205,25 @@ export function generateCSVExport(
         ].join(','),
       );
     }
+  }
+
+  // Sociocultural exposure module: every response + subscales
+  if (record.sociocultural) {
+    const socio = record.sociocultural;
+    lines.push('');
+    lines.push('# sociocultural');
+    lines.push(['item_id', 'section', 'question', 'response'].join(','));
+    for (const item of SOCIO_ITEMS) {
+      const v = socio.responses[item.id];
+      const rendered = Array.isArray(v) ? v.join('|') : (v ?? '');
+      lines.push(
+        [item.id, item.section, `"${item.text.replace(/"/g, '""')}"`, `"${rendered}"`].join(','),
+      );
+    }
+    for (const [key, val] of Object.entries(socio.subscales)) {
+      lines.push([`subscale_${key}`, 'score', '""', val].join(','));
+    }
+    lines.push(['duration_ms', 'meta', '""', socio.durationMs].join(','));
   }
 
   // Section 3: complete raw adjustment stream
