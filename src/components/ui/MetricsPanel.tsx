@@ -94,7 +94,7 @@ export default function MetricsPanel() {
         <MetricRow label="BMI" value={metrics.bmi} originalValue={originalMetrics.bmi} unit="kg/m²" />
         <MetricRow label="Fat" value={metrics.bodyFat} originalValue={originalMetrics.bodyFat} unit="%" />
         <MetricRow label="Fat Mass" value={metrics.fatMassLb} originalValue={originalMetrics.fatMassLb} unit="lbs" />
-        <MetricRow label="Fat-Free Mass" value={metrics.fatFreeMassLb} originalValue={originalMetrics.fatFreeMassLb} unit="lbs" />
+        <MetricRow label="FFM" value={metrics.fatFreeMassLb} originalValue={originalMetrics.fatFreeMassLb} unit="lbs" />
         <MetricRow label="Waist" value={metrics.waistCirc} originalValue={originalMetrics.waistCirc} unit="cm" />
         <MetricRow label="Hip" value={metrics.hipCirc} originalValue={originalMetrics.hipCirc} unit="cm" />
         <MetricRow label="WHR" value={metrics.whr} originalValue={originalMetrics.whr} unit="" precision={2} />

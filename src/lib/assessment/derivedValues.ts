@@ -59,7 +59,7 @@ export function computeDerivedValues(
     { key: 'bmi', label: 'BMI', unit: 'kg/m²' },
     { key: 'bodyFat', label: 'Fat', unit: '%' },
     { key: 'fatMassLb', label: 'Fat Mass', unit: 'lbs' },
-    { key: 'fatFreeMassLb', label: 'Fat-Free Mass', unit: 'lbs' },
+    { key: 'fatFreeMassLb', label: 'FFM', unit: 'lbs' },
     { key: 'waistCirc', label: 'Waist', unit: 'cm' },
     { key: 'hipCirc', label: 'Hip', unit: 'cm' },
     { key: 'whtr', label: 'WHtR', unit: '', precision: 2 },

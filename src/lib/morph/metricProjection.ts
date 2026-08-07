@@ -187,7 +187,10 @@ export function projectMetrics(
     measures['TotalHeight'] ??
     (bodyComp['Height'] ? bodyComp['Height'] * 2.54 : 0);
 
-  // Body-composition splits at the current BF%.
+  // Body-composition splits. By definition (and only ever this):
+  //   FM  = current weight x current BF%   (whatever both are right now)
+  //   FFM = current weight - FM
+  // Segments influence FM/FFM only through their effect on weight.
   const fatMassLb = estimatedWeight * (currentBF / 100);
   const fatFreeMassLb = estimatedWeight - fatMassLb;
   const estimatedWHtR = heightCm > 0 ? estimatedWaist / heightCm : 0;
