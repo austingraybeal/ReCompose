@@ -166,7 +166,7 @@ export async function generatePDFReport(
     );
     const cellH = imgH + 10; // image + label + pill line
 
-    sectionTitle('SUBJECTIVE PERCEPTIONS (ghost = actual body)', cellH + 14);
+    sectionTitle('SUBJECTIVE PERCEPTIONS', cellH + 14);
     for (let rowStart = 0; rowStart < snapTasks.length; rowStart += perRow) {
       const row = snapTasks.slice(rowStart, rowStart + perRow);
       ensureRoom(cellH + 2);

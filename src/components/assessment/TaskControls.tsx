@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
+import { useViewStore } from '@/lib/stores/viewStore';
 import type { TaskType } from '@/types/assessment';
 import type { SegmentId } from '@/types/scan';
 import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
@@ -21,6 +22,8 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
   const recordReset = useAssessmentStore((s) => s.recordReset);
   const showValues = useAssessmentStore((s) => s.showValues);
   const toggleShowValues = useAssessmentStore((s) => s.toggleShowValues);
+  const ghostOverlay = useViewStore((s) => s.ghostOverlay);
+  const toggleGhostOverlay = useViewStore((s) => s.toggleGhostOverlay);
 
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
@@ -112,6 +115,21 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
         }}
       >
         {showValues ? 'Hide Values' : 'Show Values'}
+      </button>
+
+      {/* Ghost shell toggle — off by default during BIDS tasks */}
+      <button
+        onClick={toggleGhostOverlay}
+        className="px-3 py-2 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
+        style={{
+          background: ghostOverlay ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
+          color: ghostOverlay ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+          border: ghostOverlay
+            ? '1px solid rgba(168, 98, 248, 0.3)'
+            : '1px solid var(--rc-border-default)',
+        }}
+      >
+        Ghost {ghostOverlay ? 'On' : 'Off'}
       </button>
 
       <div className="flex-1" />

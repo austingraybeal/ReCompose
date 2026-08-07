@@ -41,9 +41,10 @@ export default function GhostOverlay() {
 
   // deltaBF > 0: figure larger than actual, ghost inside -> brighten.
   // deltaBF < 0: figure smaller, ghost surrounds it -> keep faint.
+  // Whole range halved by request — the shell should whisper, not shout.
   const deltaBF = globalBodyFat - originalBodyFat;
   const t = Math.max(-1, Math.min(1, deltaBF / 20));
-  const opacity = t >= 0 ? 0.16 + 0.2 * t : Math.max(0.08, 0.16 + 0.08 * t);
+  const opacity = t >= 0 ? 0.08 + 0.1 * t : Math.max(0.04, 0.08 + 0.04 * t);
 
   return (
     <mesh geometry={ghostGeometry} renderOrder={2}>

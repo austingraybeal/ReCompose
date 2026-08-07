@@ -140,11 +140,11 @@ export default function ResultsSummary() {
     ? 'ideal'
     : (tasks.find((t) => t !== 'perceived') ?? 'perceived');
   const [selectedView, setSelectedView] = useState<TaskType>(defaultView);
-  // Ghost shell on the result images — defaults on; falls back to the
-  // ghost captures when a plain capture is missing.
-  const [showGhostImages, setShowGhostImages] = useState(true);
+  // Ghost shell on the result images — defaults off until the ghost look
+  // is finalized; falls back to ghost captures when a plain one is missing.
+  const [showGhostImages, setShowGhostImages] = useState(false);
   const snapshots = showGhostImages
-    ? ghostSnapshots
+    ? { ...plainSnapshots, ...ghostSnapshots }
     : { ...ghostSnapshots, ...plainSnapshots };
 
   const derived = useMemo(
@@ -644,12 +644,16 @@ function BehaviorStat({ label, value, sub }: { label: string; value: string; sub
 }
 
 function DownloadPDFButton({ record, scores }: { record: import('@/types/assessment').AssessmentRecord; scores: BIDSScores }) {
-  const snapshots = useAssessmentStore((s) => s.snapshots);
+  const ghostSnapshots = useAssessmentStore((s) => s.snapshots);
+  const plainSnapshots = useAssessmentStore((s) => s.snapshotsPlain);
   const scanData = useScanStore((s) => s.scanData);
   const sex = useGenderStore((s) => s.gender);
   const handleClick = async () => {
     const { generatePDFReport } = await import('@/lib/assessment/pdfReport');
     const derived = scanData ? computeDerivedValues(record, scanData, sex) : undefined;
+    // Ghost removed from the PDF (until the shell look is finalized) —
+    // plain captures preferred, ghost only as a fallback.
+    const snapshots = { ...ghostSnapshots, ...plainSnapshots };
     generatePDFReport(record, scores, { snapshots, derived });
   };
   return (

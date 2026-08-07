@@ -43,6 +43,15 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     }
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Ghost starts off whenever an assessment begins (toggle available in
+  // the task bar).
+  useEffect(() => {
+    if (isAssessmentMode) {
+      const view = useViewStore.getState();
+      if (view.ghostOverlay) view.toggleGhostOverlay();
+    }
+  }, [isAssessmentMode]);
+
   // Auto-complete assessment when all selected tasks are done
   const allDone = selectedTasks.every((t) => !!taskResults[t]);
   useEffect(() => {
