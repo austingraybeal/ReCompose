@@ -35,11 +35,10 @@ interface AssessmentState {
   /** In-task numeric readouts hidden by default during BIDS tasks. */
   showValues: boolean;
 
-  // Canvas snapshots (data URLs) captured at each task confirm:
-  // `snapshots` includes the actual-body ghost shell, `snapshotsPlain`
-  // is the same frame without it (results-page ghost toggle).
-  snapshots: Partial<Record<TaskType, string>>;
-  snapshotsPlain: Partial<Record<TaskType, string>>;
+  // Canvas snapshots (data URLs) captured at each task confirm, one per
+  // overlay combination so the results page can toggle ghost/segments on
+  // the static images after the fact.
+  snapshotSets: Partial<Record<TaskType, SnapshotSet>>;
 
   // Final record
   assessmentRecord: AssessmentRecord | null;
@@ -51,10 +50,18 @@ interface AssessmentState {
   beginFirstTask: () => void;
   recordAdjustment: (control: 'global' | SegmentId, value: number) => void;
   recordReset: () => void;
-  confirmTask: (finalState: SliderState, snapshot?: string, snapshotPlain?: string) => void;
+  confirmTask: (finalState: SliderState, snaps?: SnapshotSet) => void;
   goBack: () => void;
   completeAssessment: (actual: ActualMetrics, scanId: string) => void;
   resetAssessment: () => void;
+}
+
+/** One canvas capture per overlay combination. */
+export interface SnapshotSet {
+  plain?: string;
+  ghost?: string;
+  seg?: string;
+  ghostSeg?: string;
 }
 
 /** Registry order is administration order; filter to the selection. */
@@ -71,8 +78,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   adjustmentTrajectory: [],
   resetCount: 0,
   showValues: false,
-  snapshots: {},
-  snapshotsPlain: {},
+  snapshotSets: {},
   assessmentRecord: null,
 
   startAssessment: () =>
@@ -85,8 +91,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       adjustmentTrajectory: [],
       resetCount: 0,
       showValues: false,
-      snapshots: {},
-      snapshotsPlain: {},
+      snapshotSets: {},
       assessmentRecord: null,
     }),
 
@@ -127,10 +132,10 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
     set((s) => ({ resetCount: s.resetCount + 1 }));
   },
 
-  confirmTask: (finalState, snapshot, snapshotPlain) => {
+  confirmTask: (finalState, snaps) => {
     const {
       currentStep, taskStartTime, adjustmentTrajectory, resetCount,
-      taskResults, snapshots, snapshotsPlain, selectedTasks,
+      taskResults, snapshotSets, selectedTasks,
     } = get();
     if (!currentStep || currentStep === 'welcome' || currentStep === 'complete' || !taskStartTime) return;
 
@@ -148,8 +153,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
     const nextStep: AssessmentStep = idx < order.length - 1 ? order[idx + 1] : 'complete';
     set({
       taskResults: { ...taskResults, [taskType]: result },
-      snapshots: { ...snapshots, ...(snapshot ? { [taskType]: snapshot } : {}) },
-      snapshotsPlain: { ...snapshotsPlain, ...(snapshotPlain ? { [taskType]: snapshotPlain } : {}) },
+      snapshotSets: { ...snapshotSets, ...(snaps ? { [taskType]: snaps } : {}) },
       currentStep: nextStep,
       taskStartTime: nextStep !== 'complete' ? Date.now() : null,
       adjustmentTrajectory: [],
@@ -200,8 +204,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       adjustmentTrajectory: [],
       resetCount: 0,
       showValues: false,
-      snapshots: {},
-      snapshotsPlain: {},
+      snapshotSets: {},
       assessmentRecord: null,
     }),
 }));

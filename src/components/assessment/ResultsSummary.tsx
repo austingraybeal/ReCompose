@@ -132,8 +132,7 @@ const BEHAVIOR_LEGEND: Array<[string, string]> = [
 
 export default function ResultsSummary() {
   const record = useAssessmentStore((s) => s.assessmentRecord);
-  const ghostSnapshots = useAssessmentStore((s) => s.snapshots);
-  const plainSnapshots = useAssessmentStore((s) => s.snapshotsPlain);
+  const snapshotSets = useAssessmentStore((s) => s.snapshotSets);
   const resetAssessment = useAssessmentStore((s) => s.resetAssessment);
   const scanData = useScanStore((s) => s.scanData);
   const sex = useGenderStore((s) => s.gender);
@@ -143,12 +142,23 @@ export default function ResultsSummary() {
     ? 'ideal'
     : (tasks.find((t) => t !== 'perceived') ?? 'perceived');
   const [selectedView, setSelectedView] = useState<TaskType>(defaultView);
-  // Ghost shell on the result images — defaults off until the ghost look
-  // is finalized; falls back to ghost captures when a plain one is missing.
+  // Image overlay toggles — both default off; each image shows the capture
+  // matching the current ghost/segments combination (falling back to
+  // whatever variant exists).
   const [showGhostImages, setShowGhostImages] = useState(false);
-  const snapshots = showGhostImages
-    ? { ...plainSnapshots, ...ghostSnapshots }
-    : { ...ghostSnapshots, ...plainSnapshots };
+  const [showSegImages, setShowSegImages] = useState(false);
+  const snapshotFor = (t: TaskType): string | undefined => {
+    const set = snapshotSets[t];
+    if (!set) return undefined;
+    const preferred = showGhostImages && showSegImages
+      ? set.ghostSeg
+      : showGhostImages
+        ? set.ghost
+        : showSegImages
+          ? set.seg
+          : set.plain;
+    return preferred ?? set.plain ?? set.ghost ?? set.seg ?? set.ghostSeg;
+  };
 
   const derived = useMemo(
     () => (record && scanData ? computeDerivedValues(record, scanData, sex) : []),
@@ -244,7 +254,7 @@ export default function ResultsSummary() {
         {/* Snapshots — clickable; drive the regional/behavioral views */}
         <div className="flex flex-wrap justify-center gap-3 mb-2">
           {tasks.map((key) => {
-            const snap = snapshots[key];
+            const snap = snapshotFor(key);
             const def = getTaskDefinition(key);
             const active = key === selectedView;
             const pill = imagePill(key);
@@ -292,24 +302,30 @@ export default function ResultsSummary() {
             );
           })}
         </div>
-        {/* Ghost toggle pinned to the left margin (only when ghost captures
-            exist); helper text centered and dropped a little lower. */}
+        {/* Ghost + Segments toggles pinned to the left margin; helper text
+            centered and dropped a little lower. */}
         <div className="relative mb-8 mt-2">
-          {Object.keys(ghostSnapshots).length > 0 && (
-            <button
-              onClick={() => setShowGhostImages((v) => !v)}
-              className="absolute left-0 top-0 px-3 py-1 rounded-full text-rc-xs font-mono transition-all duration-150"
-              style={{
-                background: showGhostImages ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
-                color: showGhostImages ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
-                border: showGhostImages
-                  ? '1px solid rgba(168, 98, 248, 0.3)'
-                  : '1px solid var(--rc-border-default)',
-              }}
-            >
-              Ghost {showGhostImages ? 'On' : 'Off'}
-            </button>
-          )}
+          <div className="absolute left-0 top-0 flex flex-col gap-1.5">
+            {([
+              { label: 'Ghost', on: showGhostImages, toggle: () => setShowGhostImages((v) => !v) },
+              { label: 'Segments', on: showSegImages, toggle: () => setShowSegImages((v) => !v) },
+            ] as const).map(({ label, on, toggle }) => (
+              <button
+                key={label}
+                onClick={toggle}
+                className="px-3 py-1 rounded-full text-rc-xs font-mono transition-all duration-150"
+                style={{
+                  background: on ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
+                  color: on ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+                  border: on
+                    ? '1px solid rgba(168, 98, 248, 0.3)'
+                    : '1px solid var(--rc-border-default)',
+                }}
+              >
+                {label} {on ? 'On' : 'Off'}
+              </button>
+            ))}
+          </div>
           <div className="text-center text-rc-xs pt-4" style={{ color: 'var(--rc-text-dim)' }}>
             Click an image to explore its regional and behavioral results.
           </div>
@@ -652,16 +668,19 @@ function BehaviorStat({ label, value, sub }: { label: string; value: string; sub
 }
 
 function DownloadPDFButton({ record, scores }: { record: import('@/types/assessment').AssessmentRecord; scores: BIDSScores }) {
-  const ghostSnapshots = useAssessmentStore((s) => s.snapshots);
-  const plainSnapshots = useAssessmentStore((s) => s.snapshotsPlain);
+  const snapshotSets = useAssessmentStore((s) => s.snapshotSets);
   const scanData = useScanStore((s) => s.scanData);
   const sex = useGenderStore((s) => s.gender);
   const handleClick = async () => {
     const { generatePDFReport } = await import('@/lib/assessment/pdfReport');
     const derived = scanData ? computeDerivedValues(record, scanData, sex) : undefined;
-    // Ghost removed from the PDF (until the shell look is finalized) —
-    // plain captures preferred, ghost only as a fallback.
-    const snapshots = { ...ghostSnapshots, ...plainSnapshots };
+    // Ghost stays out of the PDF: plain captures only (any variant as a
+    // last-resort fallback so no image box goes empty).
+    const snapshots = Object.fromEntries(
+      Object.entries(snapshotSets)
+        .map(([t, set]) => [t, set?.plain ?? set?.ghost ?? set?.seg])
+        .filter(([, v]) => !!v),
+    ) as Partial<Record<import('@/types/assessment').TaskType, string>>;
     generatePDFReport(record, scores, { snapshots, derived });
   };
   return (

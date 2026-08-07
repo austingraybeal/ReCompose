@@ -11,7 +11,7 @@ import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 
 interface TaskControlsProps {
   taskType: TaskType;
-  onCaptureSnapshot: () => Promise<{ ghost?: string; plain?: string }>;
+  onCaptureSnapshot: () => Promise<import('@/lib/stores/assessmentStore').SnapshotSet>;
 }
 
 export default function TaskControls({ taskType, onCaptureSnapshot }: TaskControlsProps) {
@@ -24,6 +24,8 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
   const toggleShowValues = useAssessmentStore((s) => s.toggleShowValues);
   const ghostOverlay = useViewStore((s) => s.ghostOverlay);
   const toggleGhostOverlay = useViewStore((s) => s.toggleGhostOverlay);
+  const segmentHighlight = useViewStore((s) => s.segmentHighlight);
+  const toggleSegmentHighlight = useViewStore((s) => s.toggleSegmentHighlight);
 
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
@@ -41,14 +43,13 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
 
   const handleConfirmClick = useCallback(async () => {
     // Single-click confirm (double-confirmation removed by design).
-    const { ghost, plain } = await onCaptureSnapshot();
+    const snaps = await onCaptureSnapshot();
     confirmTask(
       {
         globalBodyFat,
         segmentOverrides: { ...segmentOverrides } as Record<SegmentId, number>,
       },
-      ghost,
-      plain
+      snaps
     );
     setConfirmed(true);
     // Reset sliders to actual for next task
@@ -130,6 +131,21 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
         }}
       >
         Ghost {ghostOverlay ? 'On' : 'Off'}
+      </button>
+
+      {/* Segment-region tint toggle */}
+      <button
+        onClick={toggleSegmentHighlight}
+        className="px-3 py-2 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
+        style={{
+          background: segmentHighlight ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
+          color: segmentHighlight ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+          border: segmentHighlight
+            ? '1px solid rgba(168, 98, 248, 0.3)'
+            : '1px solid var(--rc-border-default)',
+        }}
+      >
+        Segments {segmentHighlight ? 'On' : 'Off'}
       </button>
 
       <div className="flex-1" />

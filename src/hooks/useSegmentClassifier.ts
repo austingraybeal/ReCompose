@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useScanStore } from '@/lib/stores/scanStore';
 import type { SegmentId } from '@/types/scan';
+import { SEGMENT_COLOR_HEX } from '@/lib/constants/segmentColors';
 
 /**
  * Hook that provides segment classification data for the loaded scan.
@@ -27,16 +28,12 @@ export function useSegmentClassifier() {
 
     const colors = new Float32Array(scanData.vertexBindings.length * 3);
 
-    const colorMap: Record<string, [number, number, number]> = {
-      shoulders: [0.29, 0.78, 0.91],  // #7f9cf5
-      upper_arms: [0.36, 0.91, 0.82], // #7f9cff
-      forearms: [0.48, 0.94, 0.88],   // #9689ff
-      torso: [0.29, 0.81, 0.63],      // #b478ff
-      waist: [0.94, 0.78, 0.29],      // #f0c84a
-      hips: [0.94, 0.46, 0.29],       // #f0764a
-      thighs: [0.65, 0.55, 0.98],     // #a78bfa
-      calves: [0.77, 0.65, 1.0],      // #c4a7ff
-    };
+    const colorMap: Record<string, [number, number, number]> = Object.fromEntries(
+      Object.entries(SEGMENT_COLOR_HEX).map(([id, hex]) => {
+        const n = parseInt(hex.slice(1), 16);
+        return [id, [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]];
+      }),
+    );
 
     for (let i = 0; i < scanData.vertexBindings.length; i++) {
       const seg = scanData.vertexBindings[i].segmentId;

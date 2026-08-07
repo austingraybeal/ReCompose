@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import { useAssessmentStore, type SnapshotSet } from '@/lib/stores/assessmentStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useViewStore } from '@/lib/stores/viewStore';
@@ -89,27 +89,53 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     }
   }, [currentStep, assessmentRecord, allDone, scanData, completeAssessment, scanFileName]);
 
-  // Capture the plain (ghost-free) canvas at confirm. The ghost variant is
-  // deliberately NOT captured for now — turning the shell on for a capture
-  // frame produced a visible flash at every task transition, and the ghost
-  // is currently disabled across results and PDF anyway.
-  const captureSnapshot = useCallback(async (): Promise<{
-    ghost?: string;
-    plain?: string;
-  }> => {
+  // Capture all four overlay combinations at confirm (plain / ghost /
+  // segments / both) so the results page can toggle them on the static
+  // images. The canvas is hidden behind an opaque cover for the ~8 frames
+  // this takes, so none of the intermediate states ever flash on screen.
+  const [capturing, setCapturing] = useState(false);
+  const captureSnapshot = useCallback(async (): Promise<SnapshotSet> => {
     try {
       const canvas = canvasRef?.current ?? document.querySelector('canvas');
       if (!canvas) return {};
 
-      const view = useViewStore.getState();
-      if (view.ghostOverlay) view.toggleGhostOverlay();
-      // Wait two frames so the ghost-free frame renders before reading.
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
-      const plain = canvas.toDataURL('image/png');
-      return { plain };
+      const waitFrames = () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
+      const setOverlays = (ghost: boolean, seg: boolean) => {
+        const view = useViewStore.getState();
+        if (view.ghostOverlay !== ghost) view.toggleGhostOverlay();
+        if (view.segmentHighlight !== seg) view.toggleSegmentHighlight();
+      };
+
+      const before = useViewStore.getState();
+      const hadGhost = before.ghostOverlay;
+      const hadSeg = before.segmentHighlight;
+
+      setCapturing(true);
+      await waitFrames(); // let the cover paint before state churn
+
+      const snaps: SnapshotSet = {};
+      setOverlays(false, false);
+      await waitFrames();
+      snaps.plain = canvas.toDataURL('image/png');
+      setOverlays(true, false);
+      await waitFrames();
+      snaps.ghost = canvas.toDataURL('image/png');
+      setOverlays(false, true);
+      await waitFrames();
+      snaps.seg = canvas.toDataURL('image/png');
+      setOverlays(true, true);
+      await waitFrames();
+      snaps.ghostSeg = canvas.toDataURL('image/png');
+
+      setOverlays(hadGhost, hadSeg);
+      await waitFrames();
+      setCapturing(false);
+      return snaps;
     } catch {
+      setCapturing(false);
       return {};
     }
   }, [canvasRef]);
@@ -159,6 +185,18 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
 
   return (
     <AnimatePresence>
+      {/* Opaque cover while the snapshot variants render off-view */}
+      {capturing && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center"
+          style={{ background: '#0a0b0f' }}
+        >
+          <div
+            className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: 'var(--rc-accent)', borderTopColor: 'transparent' }}
+          />
+        </div>
+      )}
       <div className="absolute inset-0 z-40 pointer-events-none flex flex-col">
         {/* Top bar: Progress + Instructions (pointer-events enabled) */}
         <div className="pointer-events-auto" style={{

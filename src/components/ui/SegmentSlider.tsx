@@ -2,6 +2,8 @@
 
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import { useViewStore } from '@/lib/stores/viewStore';
+import { segmentTint } from '@/lib/constants/segmentColors';
 import type { SegmentId } from '@/types/scan';
 
 interface SegmentSliderProps {
@@ -16,22 +18,30 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
   const setOverride = useMorphStore((s) => s.setSegmentOverride);
   const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
   const showValues = useAssessmentStore((s) => s.showValues);
+  const segmentHighlight = useViewStore((s) => s.segmentHighlight);
   const hideNumbers = isAssessmentMode && !showValues;
 
   const isActive = value !== 0;
+  // Segments overlay on: the pill picks up its region's color as a soft
+  // wash — a visual key matching the tinted avatar.
+  const keyTint = segmentHighlight ? segmentTint(segmentId, 0.28) : null;
 
   return (
     <div
       className="px-3 py-2 rounded-xl transition-all duration-200"
       style={{
-        background: isActive
-          ? 'linear-gradient(135deg, rgba(168, 98, 248, 0.08), rgba(168, 98, 248, 0.02))'
-          : 'var(--rc-bg-elevated)',
-        border: isActive
-          ? '1px solid rgba(168, 98, 248, 0.3)'
-          : focused
-            ? '1px solid rgba(168, 98, 248, 0.2)'
-            : '1px solid var(--rc-border-subtle)',
+        background: keyTint
+          ? `linear-gradient(0deg, ${keyTint}, ${keyTint}), var(--rc-bg-elevated)`
+          : isActive
+            ? 'linear-gradient(135deg, rgba(168, 98, 248, 0.08), rgba(168, 98, 248, 0.02))'
+            : 'var(--rc-bg-elevated)',
+        border: keyTint
+          ? `1px solid ${segmentTint(segmentId, 0.5)}`
+          : isActive
+            ? '1px solid rgba(168, 98, 248, 0.3)'
+            : focused
+              ? '1px solid rgba(168, 98, 248, 0.2)'
+              : '1px solid var(--rc-border-subtle)',
         boxShadow: isActive ? '0 0 12px rgba(168, 98, 248, 0.08)' : 'none',
       }}
     >

@@ -10,19 +10,13 @@ import { deformMesh } from '@/lib/morph/morphEngine';
 import { computeAndroidness } from '@/lib/morph/sensitivityModel';
 import type { Mesh, Intersection } from 'three';
 import { Color, BufferAttribute, Plane, Vector3, DoubleSide } from 'three';
+import { SEGMENT_COLOR_HEX } from '@/lib/constants/segmentColors';
 
 const MESH_COLOR = new Color('#bccad8');
 
-const SEGMENT_COLORS: Record<string, Color> = {
-  shoulders: new Color('#7f9cf5'),
-  upper_arms: new Color('#7f9cff'),
-  forearms: new Color('#9689ff'),
-  torso: new Color('#b478ff'),
-  waist: new Color('#f0c84a'),
-  hips: new Color('#f0764a'),
-  thighs: new Color('#a78bfa'),
-  calves: new Color('#c4a7ff'),
-};
+const SEGMENT_COLORS: Record<string, Color> = Object.fromEntries(
+  Object.entries(SEGMENT_COLOR_HEX).map(([id, hex]) => [id, new Color(hex)]),
+);
 
 export default function BodyMesh() {
   const meshRef = useRef<Mesh>(null);
