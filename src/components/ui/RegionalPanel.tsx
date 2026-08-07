@@ -9,8 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function RegionalPanel() {
   const resetOverrides = useMorphStore((s) => s.resetRegionalOverrides);
   const linkMode = useMorphStore((s) => s.linkMode);
-  const toggleLinkMode = useMorphStore((s) => s.toggleLinkMode);
-  const lockProportional = linkMode === 'proportional';
+  const setLinkMode = useMorphStore((s) => s.setLinkMode);
   const open = useViewStore((s) => s.regionalPanelOpen);
   const setOpen = useViewStore((s) => s.setRegionalPanelOpen);
   const focusedSegment = useViewStore((s) => s.focusedSegment);
@@ -52,27 +51,35 @@ export default function RegionalPanel() {
             className="overflow-hidden"
           >
             <div className="flex flex-col gap-1 pb-2">
-              {/* Link Mode toggle — independent vs proportional */}
-              <button
-                onClick={toggleLinkMode}
-                className="flex items-center gap-2 px-3 py-1.5 text-rc-xs uppercase tracking-[1px]"
-                style={{ color: lockProportional ? 'var(--rc-accent)' : 'var(--rc-text-dim)' }}
-                aria-pressed={lockProportional}
-                title={
-                  lockProportional
-                    ? 'Linked: moving one segment shifts the whole body proportionally'
-                    : 'Independent: each segment moves alone'
-                }
-              >
-                <div
-                  className="w-3 h-3 rounded-sm border transition-colors"
-                  style={{
-                    background: lockProportional ? 'var(--rc-accent)' : 'transparent',
-                    borderColor: lockProportional ? 'var(--rc-accent)' : 'var(--rc-border-default)',
-                  }}
-                />
-                {lockProportional ? 'Linked' : 'Independent'}
-              </button>
+              {/* Link mode: two mutually exclusive buttons, Independent default */}
+              <div className="flex gap-1.5 px-1 pb-1">
+                {(
+                  [
+                    { mode: 'independent', label: 'Independent', hint: 'Each segment moves alone' },
+                    { mode: 'proportional', label: 'Linked', hint: 'Moving one segment shifts the whole body proportionally' },
+                  ] as const
+                ).map(({ mode, label, hint }) => {
+                  const active = linkMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setLinkMode(mode)}
+                      aria-pressed={active}
+                      title={hint}
+                      className="flex-1 px-2 py-1.5 rounded-lg text-rc-xs font-mono uppercase tracking-[1px] transition-all duration-150"
+                      style={{
+                        background: active ? 'rgba(168, 98, 248, 0.15)' : 'var(--rc-bg-elevated)',
+                        color: active ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+                        border: active
+                          ? '1px solid rgba(168, 98, 248, 0.4)'
+                          : '1px solid var(--rc-border-default)',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
 
               {/* Segment sliders */}
               {SEGMENTS.map((seg) => (
