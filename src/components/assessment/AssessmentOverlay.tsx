@@ -35,11 +35,14 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
   // Start trajectory recording
   useTrajectoryRecorder();
 
-  // Reset sliders to actual when entering a new task
+  // Reset sliders to actual — and force the ghost off — on every task
+  // transition, so no ghost state leaks from one task into the next.
   useEffect(() => {
     if (isAssessmentMode && currentStep && currentStep !== 'welcome' && currentStep !== 'complete') {
       setGlobalBodyFat(originalBodyFat);
       resetRegionalOverrides();
+      const view = useViewStore.getState();
+      if (view.ghostOverlay) view.toggleGhostOverlay();
     }
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -86,9 +89,10 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     }
   }, [currentStep, assessmentRecord, allDone, scanData, completeAssessment, scanFileName]);
 
-  // Capture two canvas snapshots per confirm: one with the actual-body
-  // ghost shell and one without, so the results page can toggle the ghost
-  // on the static images after the fact.
+  // Capture the plain (ghost-free) canvas at confirm. The ghost variant is
+  // deliberately NOT captured for now — turning the shell on for a capture
+  // frame produced a visible flash at every task transition, and the ghost
+  // is currently disabled across results and PDF anyway.
   const captureSnapshot = useCallback(async (): Promise<{
     ghost?: string;
     plain?: string;
@@ -97,27 +101,14 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
       const canvas = canvasRef?.current ?? document.querySelector('canvas');
       if (!canvas) return {};
 
-      const waitFrames = () =>
-        new Promise<void>((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-        );
-      const setGhost = (on: boolean) => {
-        const view = useViewStore.getState();
-        if (view.ghostOverlay !== on) view.toggleGhostOverlay();
-      };
-
-      const hadGhost = useViewStore.getState().ghostOverlay;
-
-      setGhost(false);
-      await waitFrames();
+      const view = useViewStore.getState();
+      if (view.ghostOverlay) view.toggleGhostOverlay();
+      // Wait two frames so the ghost-free frame renders before reading.
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
       const plain = canvas.toDataURL('image/png');
-
-      setGhost(true);
-      await waitFrames();
-      const ghost = canvas.toDataURL('image/png');
-
-      setGhost(hadGhost);
-      return { ghost, plain };
+      return { plain };
     } catch {
       return {};
     }

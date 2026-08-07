@@ -1,9 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { AssessmentRecord, BIDSScores } from '@/types/assessment';
+import type { AssessmentRecord, BIDSScores, TaskType } from '@/types/assessment';
 import type { DerivedRow } from '@/lib/assessment/derivedValues';
-import { computeFigureData, type FigureData } from '@/lib/assessment/figureData';
+import {
+  computeFigureData,
+  computeDesiredChange,
+  type FigureData,
+} from '@/lib/assessment/figureData';
 
 function FigureCard({
   n,
@@ -144,16 +148,21 @@ function SegmentRadar({ fig }: { fig: FigureData }) {
   );
 }
 
-/** Fig 3 — desired change per measurement as % of actual. */
-function DesiredChangeBars({ fig }: { fig: FigureData }) {
-  const dc = fig.desiredChange!;
-  const W = 400;
+/**
+ * Fig 3 — desired change per measurement, % of the comparison baseline.
+ * Labels live in a fixed left column and values in a fixed right column,
+ * fully separated from the bar area so nothing can ever overlap.
+ */
+function DesiredChangeBars({ dc }: { dc: NonNullable<ReturnType<typeof computeDesiredChange>> }) {
+  const W = 420;
   const rowH = 17;
   const H = dc.rows.length * rowH + 8;
-  const labelW = 78;
-  const valueW = 40;
-  const half = (W - labelW - valueW) / 2;
-  const xc = labelW + half;
+  const labelW = 84;
+  const valueColW = 48;
+  const chartX = labelW + 8;
+  const chartW = W - chartX - valueColW - 8;
+  const half = chartW / 2;
+  const xc = chartX + half;
   const maxAbs = Math.max(5, ...dc.rows.map((r) => Math.abs(r.pct)));
 
   return (
@@ -164,7 +173,7 @@ function DesiredChangeBars({ fig }: { fig: FigureData }) {
         const len = (Math.abs(r.pct) / maxAbs) * half;
         return (
           <g key={r.label}>
-            <text x={labelW - 6} y={cy + 3} fontSize="8.5" fill="var(--rc-text-secondary)" textAnchor="end">
+            <text x={labelW} y={cy + 3} fontSize="8.5" fill="var(--rc-text-secondary)" textAnchor="end">
               {r.label}
             </text>
             <rect
@@ -176,11 +185,11 @@ function DesiredChangeBars({ fig }: { fig: FigureData }) {
               fill="var(--rc-accent)"
             />
             <text
-              x={r.pct >= 0 ? xc + len + 4 : xc - len - 4}
+              x={W - 4}
               y={cy + 3}
               fontSize="8"
               fill="var(--rc-text-primary)"
-              textAnchor={r.pct >= 0 ? 'start' : 'end'}
+              textAnchor="end"
             >
               {r.pct > 0 ? '+' : ''}{r.pct.toFixed(1)}%
             </text>
@@ -302,14 +311,21 @@ export default function ResultFigures({
   record,
   scores,
   derived,
+  selectedView,
 }: {
   record: AssessmentRecord;
   scores: BIDSScores;
   derived: DerivedRow[];
+  selectedView: TaskType;
 }) {
   const fig = useMemo(
     () => computeFigureData(record, scores, derived),
     [record, scores, derived],
+  );
+  // Fig 3 follows the clicked image: perceived vs actual, others vs perceived.
+  const dc = useMemo(
+    () => computeDesiredChange(derived, selectedView),
+    [derived, selectedView],
   );
 
   return (
@@ -334,9 +350,9 @@ export default function ResultFigures({
         <FigureCard n={2} title="Regional profile across perspectives (−15 to +15)">
           <SegmentRadar fig={fig} />
         </FigureCard>
-        {fig.desiredChange && (
-          <FigureCard n={3} title={`Desired change vs actual — ${fig.desiredChange.taskLabel} (% of actual)`}>
-            <DesiredChangeBars fig={fig} />
+        {dc && (
+          <FigureCard n={3} title={`Desired change — ${dc.taskLabel} ${dc.vsLabel} (% of ${dc.vsLabel === 'vs Perceived' ? 'perceived' : 'actual'})`}>
+            <DesiredChangeBars dc={dc} />
           </FigureCard>
         )}
         <FigureCard n={4} title="Time on task vs adjustments and path length">

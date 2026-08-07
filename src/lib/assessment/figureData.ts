@@ -27,8 +27,37 @@ export interface RadarSeries {
 
 export interface DesiredChangeRow {
   label: string;
-  /** Change vs actual as % of actual (unit-free). */
+  /** Change vs the comparison baseline, as % of that baseline (unit-free). */
   pct: number;
+}
+
+/**
+ * Fig-3 rows for one view: perceived compares against actual; every other
+ * task compares against the perceived body — same convention as every
+ * score in the report.
+ */
+export function computeDesiredChange(
+  derived: DerivedRow[],
+  view: TaskType,
+): { taskLabel: string; vsLabel: string; rows: DesiredChangeRow[] } | null {
+  const vsPerceived = view !== 'perceived';
+  const rows = derived
+    .filter((d) => d.key !== 'heightCm' && d.perTask[view] !== undefined)
+    .map((d) => {
+      const baseline = vsPerceived ? d.perTask.perceived : d.actual;
+      if (baseline === undefined || baseline === 0) return null;
+      return {
+        label: d.label,
+        pct: r1(((d.perTask[view]! - baseline) / baseline) * 100),
+      };
+    })
+    .filter((r): r is DesiredChangeRow => r !== null);
+  if (rows.length === 0) return null;
+  return {
+    taskLabel: getTaskDefinition(view).shortLabel,
+    vsLabel: vsPerceived ? 'vs Perceived' : 'vs Actual',
+    rows,
+  };
 }
 
 export interface EffortRow {
@@ -47,9 +76,9 @@ export interface FigureData {
   /** Fig 2 — 8-segment profile per task. */
   radarAxes: string[];
   radarSeries: RadarSeries[];
-  /** Fig 3 — desired change per measurement (% of actual). Null when the
-      reference task has no derived rows. */
-  desiredChange: { taskLabel: string; rows: DesiredChangeRow[] } | null;
+  /** Fig 3 — desired change per measurement (% of the comparison baseline).
+      Null when the reference task has no derived rows. */
+  desiredChange: { taskLabel: string; vsLabel: string; rows: DesiredChangeRow[] } | null;
   /** Fig 4 — time on task vs adjustments and path length. */
   effort: EffortRow[];
   /** Fig 5 — adjustments per control x task. */
@@ -98,21 +127,12 @@ export function computeFigureData(
     values: SEGMENT_ORDER.map((id) => record.tasks[t]!.finalState.segmentOverrides[id]),
   }));
 
-  // Fig 3 — desired change vs actual, % of actual. Reference task: ideal
-  // when administered, otherwise the first comparison.
-  const refTask = tasks.includes('ideal') ? 'ideal' : comparisons[0];
-  let desiredChange: FigureData['desiredChange'] = null;
-  if (refTask) {
-    const rows = derived
-      .filter((d) => d.key !== 'heightCm' && d.actual > 0 && d.perTask[refTask] !== undefined)
-      .map((d) => ({
-        label: d.label,
-        pct: r1(((d.perTask[refTask]! - d.actual) / d.actual) * 100),
-      }));
-    if (rows.length > 0) {
-      desiredChange = { taskLabel: shortLabel(refTask), rows };
-    }
-  }
+  // Fig 3 — reference task: ideal when administered, else the first
+  // comparison (compared vs perceived), else perceived itself (vs actual).
+  const refTask: TaskType = tasks.includes('ideal')
+    ? 'ideal'
+    : (comparisons[0] ?? 'perceived');
+  const desiredChange = computeDesiredChange(derived, refTask);
 
   // Fig 4 — effort combo
   const effort: EffortRow[] = tasks.map((t) => {

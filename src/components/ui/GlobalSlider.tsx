@@ -110,10 +110,13 @@ export default function GlobalSlider() {
           }}
         />
 
-        <div className="flex justify-between mt-2">
-          <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>5%</span>
-          <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>55%</span>
-        </div>
+        {/* Range anchors hidden during BIDS so the scale isn't suggested */}
+        {!isAssessmentMode && (
+          <div className="flex justify-between mt-2">
+            <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>5%</span>
+            <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>55%</span>
+          </div>
+        )}
       </div>
     </div>
   );

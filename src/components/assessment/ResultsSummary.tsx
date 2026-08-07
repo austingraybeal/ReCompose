@@ -40,6 +40,9 @@ function ScoreCard({
       style={{
         background: 'var(--rc-bg-surface)',
         border: '1px solid var(--rc-border-default)',
+        width: 'calc(33.333% - 0.5rem)',
+        minWidth: 240,
+        flexGrow: 0,
       }}
     >
       <div className="text-[9px] uppercase tracking-[2px] font-mono mb-2" style={{ color: 'var(--rc-text-dim)' }}>
@@ -289,27 +292,32 @@ export default function ResultsSummary() {
             );
           })}
         </div>
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <span className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+        {/* Ghost toggle pinned to the left margin (only when ghost captures
+            exist); helper text centered and dropped a little lower. */}
+        <div className="relative mb-8 mt-2">
+          {Object.keys(ghostSnapshots).length > 0 && (
+            <button
+              onClick={() => setShowGhostImages((v) => !v)}
+              className="absolute left-0 top-0 px-3 py-1 rounded-full text-rc-xs font-mono transition-all duration-150"
+              style={{
+                background: showGhostImages ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
+                color: showGhostImages ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+                border: showGhostImages
+                  ? '1px solid rgba(168, 98, 248, 0.3)'
+                  : '1px solid var(--rc-border-default)',
+              }}
+            >
+              Ghost {showGhostImages ? 'On' : 'Off'}
+            </button>
+          )}
+          <div className="text-center text-rc-xs pt-4" style={{ color: 'var(--rc-text-dim)' }}>
             Click an image to explore its regional and behavioral results.
-          </span>
-          <button
-            onClick={() => setShowGhostImages((v) => !v)}
-            className="px-3 py-1 rounded-full text-rc-xs font-mono transition-all duration-150"
-            style={{
-              background: showGhostImages ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
-              color: showGhostImages ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
-              border: showGhostImages
-                ? '1px solid rgba(168, 98, 248, 0.3)'
-                : '1px solid var(--rc-border-default)',
-            }}
-          >
-            Ghost {showGhostImages ? 'On' : 'Off'}
-          </button>
+          </div>
         </div>
 
-        {/* Score cards: distortion + every selected comparison vs perceived */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+        {/* Score cards: distortion + every selected comparison vs perceived
+            (flex + justify-center so partial rows stay centered) */}
+        <div className="flex flex-wrap justify-center gap-3 mb-8">
           <ScoreCard
             label="Body Image Distortion (BIDS-D)"
             value={`${scores.distortion > 0 ? '+' : ''}${scores.distortion.toFixed(1)}%`}
@@ -488,7 +496,7 @@ export default function ResultsSummary() {
         )}
 
         {/* Five assessment figures + adaptive headline */}
-        <ResultFigures record={record} scores={scores} derived={derived} />
+        <ResultFigures record={record} scores={scores} derived={derived} selectedView={selectedView} />
 
         {/* Behavioral metrics for the selected view */}
         <div

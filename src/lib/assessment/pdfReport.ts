@@ -689,7 +689,7 @@ export async function generatePDFReport(
       const rowH = 5;
       const h = rows.length * rowH;
       ensureRoom(h + 18);
-      figTitle(3, `Desired change vs actual — ${fig.desiredChange.taskLabel} (% of actual)`);
+      figTitle(3, `Desired change — ${fig.desiredChange.taskLabel} ${fig.desiredChange.vsLabel} (% of baseline)`);
       const labelW = 26;
       const half = (contentWidth - labelW) / 2 - 12;
       const xc = margin + labelW + half + 6;

@@ -80,14 +80,14 @@ export default function HomePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, ease: 'easeOut' }}
       >
-        {/* Logo mark */}
-        <div className="mx-auto mb-6 flex items-center justify-center">
-          <BrandLogo size={180} />
+        {/* Logo mark — clamps down on short laptop viewports */}
+        <div className="mx-auto mb-5 flex items-center justify-center">
+          <BrandLogo size={180} cssSize="min(180px, 19vh)" />
         </div>
 
         <h1
           className="font-mono font-bold tracking-tight"
-          style={{ fontSize: '64px', color: 'var(--rc-text-primary)' }}
+          style={{ fontSize: 'clamp(40px, 7vh, 64px)', color: 'var(--rc-text-primary)' }}
         >
           Re<span style={{ color: 'var(--rc-accent)' }}>Compose</span>
         </h1>

@@ -93,7 +93,7 @@ export default function BodyMesh() {
         const seg = scanData.vertexBindings[i].segmentId;
         const isHovered = hoveredSegment === seg;
         const color = SEGMENT_COLORS[seg] ?? MESH_COLOR;
-        const intensity = isHovered ? 1.0 : 0.3;
+        const intensity = isHovered ? 1.0 : 0.75;
         colors[i * 3] = color.r * intensity + MESH_COLOR.r * (1 - intensity);
         colors[i * 3 + 1] = color.g * intensity + MESH_COLOR.g * (1 - intensity);
         colors[i * 3 + 2] = color.b * intensity + MESH_COLOR.b * (1 - intensity);
@@ -144,8 +144,12 @@ export default function BodyMesh() {
       onClick={handleClick}
     >
       {/* DoubleSide fills the armpit webbing strips (one-sided scan
-          geometry read as holes when their backs faced the camera). */}
+          geometry read as holes when their backs faced the camera).
+          key: toggling vertexColors is a shader-compile-time switch in
+          three.js — flipping the flag on a live material does nothing
+          until the program rebuilds, so remount the material instead. */}
       <meshStandardMaterial
+        key={segmentHighlight ? 'seg-colors' : 'plain'}
         color={MESH_COLOR}
         roughness={0.7}
         metalness={0.05}

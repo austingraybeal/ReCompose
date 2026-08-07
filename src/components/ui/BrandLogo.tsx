@@ -8,7 +8,7 @@ import { useState } from 'react';
  * The PNG carries its own rounded-square frame, so corners are clipped to
  * match and a soft accent glow is added behind it.
  */
-export default function BrandLogo({ size }: { size: number }) {
+export default function BrandLogo({ size, cssSize }: { size: number; cssSize?: string }) {
   const [failed, setFailed] = useState(false);
 
   if (failed) {
@@ -45,8 +45,8 @@ export default function BrandLogo({ size }: { size: number }) {
       onError={() => setFailed(true)}
       className="shrink-0"
       style={{
-        width: size,
-        height: size,
+        width: cssSize ?? size,
+        height: cssSize ?? size,
         borderRadius: size * 0.18,
         boxShadow: `0 0 ${Math.round(size * 0.4)}px rgba(168, 98, 248, 0.25)`,
       }}
