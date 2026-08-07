@@ -81,12 +81,22 @@ export function projectMetrics(
 ): ProjectedMetrics {
   const deltaBF = currentBF - originalBF;
 
-  // Fat-mass-only weight model: lean mass held constant, fat fraction updated.
+  // Composition-split weight model: of the weight change implied by moving
+  // global BF%, 75% is fat and 25% is lean tissue (matches body-composition
+  // literature for weight gain/loss). Solving W so that fat% = f while
+  // FFM gains (1-p) of the weight change:
+  //   W = (FFM0 - (1-p) * W0) / (p - f)
+  // At f = f0 this reduces to W0 exactly. Unlike the previous lean-constant
+  // model (p = 1), FFM = W - FM now responds to the global slider.
+  const FAT_SHARE_OF_WEIGHT_CHANGE = 0.75;
+  const p = FAT_SHARE_OF_WEIGHT_CHANGE;
   const originalFatFraction = originalBF / 100;
   const leanMass = bodyComp.weight * (1 - originalFatFraction);
   const newFatFraction = currentBF / 100;
-  const clampedNewFatFraction = Math.min(newFatFraction, 0.65);
-  const baseWeight = leanMass / (1 - clampedNewFatFraction);
+  // Keep the denominator away from zero (slider tops out at 55% anyway).
+  const clampedNewFatFraction = Math.min(newFatFraction, p - 0.12);
+  const baseWeight =
+    (leanMass - (1 - p) * bodyComp.weight) / (p - clampedNewFatFraction);
 
   // Regional overrides add additional weight shifts.
   // Arms and legs are split; their combined weights equal the legacy 6-segment model.

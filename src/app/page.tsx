@@ -82,12 +82,12 @@ export default function HomePage() {
       >
         {/* Logo mark */}
         <div className="mx-auto mb-6 flex items-center justify-center">
-          <BrandLogo size={104} />
+          <BrandLogo size={180} />
         </div>
 
         <h1
           className="font-mono font-bold tracking-tight"
-          style={{ fontSize: '42px', color: 'var(--rc-text-primary)' }}
+          style={{ fontSize: '64px', color: 'var(--rc-text-primary)' }}
         >
           Re<span style={{ color: 'var(--rc-accent)' }}>Compose</span>
         </h1>
