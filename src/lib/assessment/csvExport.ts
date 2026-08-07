@@ -25,6 +25,7 @@ export function generateCSVExport(
 
   const headers = [
     'assessment_id',
+    'participant_id',
     'scan_id',
     'timestamp',
     'selected_tasks',
@@ -57,6 +58,7 @@ export function generateCSVExport(
 
   const values: (string | number)[] = [
     record.id,
+    `"${record.participantId ?? ''}"`,
     `"${record.scanId}"`,
     record.timestamp,
     `"${tasks.join('>')}"`,

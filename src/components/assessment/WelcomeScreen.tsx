@@ -14,6 +14,8 @@ export default function WelcomeScreen() {
   const beginFirstTask = useAssessmentStore((s) => s.beginFirstTask);
   const selectedTasks = useAssessmentStore((s) => s.selectedTasks);
   const toggleTask = useAssessmentStore((s) => s.toggleTask);
+  const participantId = useAssessmentStore((s) => s.participantId);
+  const setParticipantId = useAssessmentStore((s) => s.setParticipantId);
 
   const minutes = selectedTasks.length; // 1 minute per selected task
   const selectedInOrder = TASK_DEFINITIONS.filter((d) => selectedTasks.includes(d.id));
@@ -134,6 +136,29 @@ export default function WelcomeScreen() {
               </div>
             );
           })}
+        </div>
+
+        {/* Optional participant / session ID for research exports */}
+        <div className="mb-4">
+          <label
+            className="block text-[10px] uppercase tracking-[2px] font-mono mb-1.5"
+            style={{ color: 'var(--rc-text-dim)' }}
+          >
+            Participant / Session ID <span style={{ textTransform: 'none' }}>(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={participantId}
+            onChange={(e) => setParticipantId(e.target.value)}
+            placeholder="e.g. P014"
+            maxLength={40}
+            className="w-full px-3 py-2 rounded-lg font-mono text-rc-sm outline-none"
+            style={{
+              background: 'var(--rc-bg-surface)',
+              border: '1px solid var(--rc-border-default)',
+              color: 'var(--rc-text-primary)',
+            }}
+          />
         </div>
 
         <div className="flex items-center gap-2 mb-6">

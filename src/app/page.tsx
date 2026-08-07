@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useViewStore, type AppMode } from '@/lib/stores/viewStore';
+import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import {
+  loadSessionFromBrowser,
+  parseSessionFile,
+  type SessionFile,
+} from '@/lib/assessment/sessionFile';
 import UploadZone from '@/components/ui/UploadZone';
 import BrandLogo from '@/components/ui/BrandLogo';
 import { motion } from 'framer-motion';
@@ -53,6 +59,34 @@ export default function HomePage() {
   const scanData = useScanStore((s) => s.scanData);
   const appMode = useViewStore((s) => s.appMode);
   const setAppMode = useViewStore((s) => s.setAppMode);
+  const hydrateSession = useAssessmentStore((s) => s.hydrateSession);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [savedSession, setSavedSession] = useState<SessionFile | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  // Surface the auto-backed-up session, if one exists.
+  useEffect(() => {
+    setSavedSession(loadSessionFromBrowser());
+  }, []);
+
+  const openSession = (file: SessionFile) => {
+    hydrateSession({
+      record: file.record,
+      snapshotSets: file.snapshotSets,
+      derived: file.derived,
+    });
+    router.push('/session');
+  };
+
+  const handleSessionFile = async (f: File) => {
+    const parsed = parseSessionFile(await f.text());
+    if (parsed) {
+      setLoadError(false);
+      openSession(parsed);
+    } else {
+      setLoadError(true);
+    }
+  };
 
   // A mode must be chosen before the viewer opens.
   useEffect(() => {
@@ -137,6 +171,57 @@ export default function HomePage() {
         <UploadZone />
       </motion.div>
 
+      {/* Saved-session entry points */}
+      <motion.div
+        className="mt-6 flex flex-wrap items-center justify-center gap-3 relative z-10"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.7, delay: 0.25 }}
+      >
+        {savedSession && (
+          <button
+            onClick={() => openSession(savedSession)}
+            className="px-4 py-2 rounded-lg font-mono text-rc-xs tracking-wide transition-all duration-150"
+            style={{
+              background: 'rgba(168, 98, 248, 0.1)',
+              color: 'var(--rc-accent)',
+              border: '1px solid rgba(168, 98, 248, 0.3)',
+            }}
+          >
+            Restore last session
+            {savedSession.record.participantId ? ` (${savedSession.record.participantId})` : ''}
+            {' · '}
+            {new Date(savedSession.savedAt).toLocaleString()}
+          </button>
+        )}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="px-4 py-2 rounded-lg font-mono text-rc-xs tracking-wide transition-all duration-150"
+          style={{
+            background: 'var(--rc-bg-elevated)',
+            color: 'var(--rc-text-secondary)',
+            border: '1px solid var(--rc-border-default)',
+          }}
+        >
+          Load Session File
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleSessionFile(f);
+            e.target.value = '';
+          }}
+        />
+        {loadError && (
+          <span className="text-rc-xs font-mono" style={{ color: '#e0445a' }}>
+            Not a valid ReCompose session file.
+          </span>
+        )}
+      </motion.div>
     </div>
   );
 }

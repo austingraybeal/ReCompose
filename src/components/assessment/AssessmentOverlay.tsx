@@ -7,6 +7,9 @@ import { useMorphStore } from '@/lib/stores/morphStore';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useViewStore } from '@/lib/stores/viewStore';
 import { useTrajectoryRecorder } from '@/hooks/useTrajectoryRecorder';
+import { useGenderStore } from '@/lib/stores/genderStore';
+import { computeDerivedValues } from '@/lib/assessment/derivedValues';
+import { buildSessionFile, saveSessionToBrowser } from '@/lib/assessment/sessionFile';
 import WelcomeScreen from './WelcomeScreen';
 import ProgressBar from './ProgressBar';
 import InstructionCard from './InstructionCard';
@@ -28,6 +31,8 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
 
   const scanData = useScanStore((s) => s.scanData);
   const scanFileName = useScanStore((s) => s.scanFileName);
+  const sex = useGenderStore((s) => s.gender);
+  const snapshotSets = useAssessmentStore((s) => s.snapshotSets);
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const setGlobalBodyFat = useMorphStore((s) => s.setGlobalBodyFat);
   const resetRegionalOverrides = useMorphStore((s) => s.resetRegionalOverrides);
@@ -88,6 +93,18 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
       completeAssessment(actual, ampm ? ampm[1] : rawName.replace(/\.obj$/i, ''));
     }
   }, [currentStep, assessmentRecord, allDone, scanData, completeAssessment, scanFileName]);
+
+  // Auto-backup the finished session to browser storage so a refresh
+  // can't destroy collected data (snapshots dropped if quota is tight).
+  useEffect(() => {
+    if (!assessmentRecord || !scanData) return;
+    try {
+      const derived = computeDerivedValues(assessmentRecord, scanData, sex);
+      saveSessionToBrowser(buildSessionFile(assessmentRecord, derived, snapshotSets));
+    } catch {
+      // backup is best-effort
+    }
+  }, [assessmentRecord, scanData, sex, snapshotSets]);
 
   // Capture all four overlay combinations at confirm (plain / ghost /
   // segments / both) so the results page can toggle them on the static

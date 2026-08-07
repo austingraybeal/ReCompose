@@ -35,6 +35,13 @@ interface AssessmentState {
   /** In-task numeric readouts hidden by default during BIDS tasks. */
   showValues: boolean;
 
+  /** Researcher-entered participant/session ID (optional). */
+  participantId: string;
+
+  /** Implied-measurement rows carried by a loaded session file, so the
+      results view can render without the original scan present. */
+  sessionDerived: import('@/lib/assessment/derivedValues').DerivedRow[] | null;
+
   // Canvas snapshots (data URLs) captured at each task confirm, one per
   // overlay combination so the results page can toggle ghost/segments on
   // the static images after the fact.
@@ -47,6 +54,13 @@ interface AssessmentState {
   startAssessment: () => void;
   toggleTask: (task: TaskType) => void;
   toggleShowValues: () => void;
+  setParticipantId: (id: string) => void;
+  /** Hydrate the store from a saved session file (results-only view). */
+  hydrateSession: (payload: {
+    record: AssessmentRecord;
+    snapshotSets: Partial<Record<TaskType, SnapshotSet>>;
+    derived: import('@/lib/assessment/derivedValues').DerivedRow[];
+  }) => void;
   beginFirstTask: () => void;
   recordAdjustment: (control: 'global' | SegmentId, value: number) => void;
   recordReset: () => void;
@@ -78,8 +92,22 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   adjustmentTrajectory: [],
   resetCount: 0,
   showValues: false,
+  participantId: '',
+  sessionDerived: null,
   snapshotSets: {},
   assessmentRecord: null,
+
+  setParticipantId: (id) => set({ participantId: id }),
+
+  hydrateSession: ({ record, snapshotSets, derived }) =>
+    set({
+      assessmentRecord: record,
+      snapshotSets,
+      sessionDerived: derived,
+      participantId: record.participantId ?? '',
+      isAssessmentMode: false,
+      currentStep: null,
+    }),
 
   startAssessment: () =>
     set({
@@ -176,7 +204,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   },
 
   completeAssessment: (actual, scanId) => {
-    const { taskResults, selectedTasks } = get();
+    const { taskResults, selectedTasks, participantId } = get();
     const order = orderedSelection(selectedTasks);
     if (!order.every((t) => taskResults[t])) return;
 
@@ -185,6 +213,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       scanId,
+      ...(participantId.trim() ? { participantId: participantId.trim() } : {}),
       actual,
       selectedTasks: order,
       tasks: { ...taskResults },

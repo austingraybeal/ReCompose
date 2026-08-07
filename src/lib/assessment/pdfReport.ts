@@ -125,7 +125,10 @@ export async function generatePDFReport(
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   const dateStr = new Date(record.timestamp).toLocaleString();
-  doc.text(`Assessment Date: ${dateStr}  |  Scan ID: ${record.scanId}`, margin, y);
+  const idLine = record.participantId
+    ? `Participant: ${record.participantId}  |  Scan ID: ${record.scanId}`
+    : `Scan ID: ${record.scanId}`;
+  doc.text(`Assessment Date: ${dateStr}  |  ${idLine}`, margin, y);
   y += 10;
 
   doc.setDrawColor(...ACCENT);
@@ -842,5 +845,7 @@ export async function generatePDFReport(
   y += 3.5;
   doc.text('Privacy: Scan data processed client-side. No biometric data was transmitted to external servers.', margin, y);
 
-  doc.save(`recompose-assessment-${record.scanId || record.id.slice(0, 8)}.pdf`);
+  doc.save(
+    `recompose-assessment-${(record.participantId || record.scanId || record.id.slice(0, 8)).replace(/[^\w.-]+/g, '_')}.pdf`,
+  );
 }

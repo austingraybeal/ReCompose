@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import { useScanStore } from '@/lib/stores/scanStore';
@@ -18,6 +19,7 @@ import {
 import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 import { computeDerivedValues } from '@/lib/assessment/derivedValues';
+import { buildSessionFile, sessionBaseName } from '@/lib/assessment/sessionFile';
 import ResultFigures from './ResultFigures';
 import type { BIDSScores, TaskType, SegmentDistortion } from '@/types/assessment';
 
@@ -131,6 +133,7 @@ const BEHAVIOR_LEGEND: Array<[string, string]> = [
 ];
 
 export default function ResultsSummary() {
+  const router = useRouter();
   const record = useAssessmentStore((s) => s.assessmentRecord);
   const snapshotSets = useAssessmentStore((s) => s.snapshotSets);
   const resetAssessment = useAssessmentStore((s) => s.resetAssessment);
@@ -160,9 +163,15 @@ export default function ResultsSummary() {
     return preferred ?? set.plain ?? set.ghost ?? set.seg ?? set.ghostSeg;
   };
 
+  // Live scan when present; otherwise the derived rows carried by a
+  // loaded session file.
+  const sessionDerived = useAssessmentStore((s) => s.sessionDerived);
   const derived = useMemo(
-    () => (record && scanData ? computeDerivedValues(record, scanData, sex) : []),
-    [record, scanData, sex],
+    () =>
+      record && scanData
+        ? computeDerivedValues(record, scanData, sex)
+        : (sessionDerived ?? []),
+    [record, scanData, sex, sessionDerived],
   );
 
   if (!record) return null;
@@ -638,10 +647,15 @@ export default function ResultsSummary() {
         {/* Action buttons */}
         <div className="flex flex-wrap items-center gap-3 justify-center">
           <DownloadPDFButton record={record} scores={scores} />
+          <SaveSessionButton />
           <DownloadJSONButton record={record} />
           <DownloadCSVButton record={record} scores={scores} />
           <button
-            onClick={resetAssessment}
+            onClick={() => {
+              resetAssessment();
+              // Loaded-session view has no scan behind it — go home instead.
+              if (!scanData) router.push('/');
+            }}
             className="px-5 py-2.5 rounded-xl font-mono text-rc-xs tracking-wide transition-all duration-150"
             style={{
               background: 'var(--rc-bg-elevated)',
@@ -649,7 +663,7 @@ export default function ResultsSummary() {
               border: '1px solid var(--rc-border-default)',
             }}
           >
-            Return to Viewer
+            {scanData ? 'Return to Viewer' : 'Back to Start'}
           </button>
         </div>
       </div>
@@ -671,9 +685,12 @@ function DownloadPDFButton({ record, scores }: { record: import('@/types/assessm
   const snapshotSets = useAssessmentStore((s) => s.snapshotSets);
   const scanData = useScanStore((s) => s.scanData);
   const sex = useGenderStore((s) => s.gender);
+  const sessionDerived = useAssessmentStore((s) => s.sessionDerived);
   const handleClick = async () => {
     const { generatePDFReport } = await import('@/lib/assessment/pdfReport');
-    const derived = scanData ? computeDerivedValues(record, scanData, sex) : undefined;
+    const derived = scanData
+      ? computeDerivedValues(record, scanData, sex)
+      : (sessionDerived ?? undefined);
     // Ghost stays out of the PDF: plain captures only (any variant as a
     // last-resort fallback so no image box goes empty).
     const snapshots = Object.fromEntries(
@@ -698,13 +715,49 @@ function DownloadPDFButton({ record, scores }: { record: import('@/types/assessm
   );
 }
 
+/** Complete reloadable session file (record + derived + snapshots). */
+function SaveSessionButton() {
+  const record = useAssessmentStore((s) => s.assessmentRecord);
+  const snapshotSets = useAssessmentStore((s) => s.snapshotSets);
+  const sessionDerived = useAssessmentStore((s) => s.sessionDerived);
+  const scanData = useScanStore((s) => s.scanData);
+  const sex = useGenderStore((s) => s.gender);
+  const handleClick = () => {
+    if (!record) return;
+    const derived = scanData
+      ? computeDerivedValues(record, scanData, sex)
+      : (sessionDerived ?? []);
+    const file = buildSessionFile(record, derived, snapshotSets);
+    const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recompose-session-${sessionBaseName(record)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  return (
+    <button
+      onClick={handleClick}
+      className="px-5 py-2.5 rounded-xl font-mono text-rc-xs tracking-wide transition-all duration-150"
+      style={{
+        background: 'var(--rc-bg-elevated)',
+        color: 'var(--rc-accent)',
+        border: '1px solid rgba(168, 98, 248, 0.3)',
+      }}
+    >
+      Save Session File
+    </button>
+  );
+}
+
 function DownloadJSONButton({ record }: { record: import('@/types/assessment').AssessmentRecord }) {
   const handleClick = () => {
     const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `recompose-assessment-${record.id.slice(0, 8)}.json`;
+    a.download = `recompose-assessment-${sessionBaseName(record)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -726,15 +779,18 @@ function DownloadJSONButton({ record }: { record: import('@/types/assessment').A
 function DownloadCSVButton({ record, scores }: { record: import('@/types/assessment').AssessmentRecord; scores: BIDSScores }) {
   const scanData = useScanStore((s) => s.scanData);
   const sex = useGenderStore((s) => s.gender);
+  const sessionDerived = useAssessmentStore((s) => s.sessionDerived);
   const handleClick = async () => {
     const { generateCSVExport } = await import('@/lib/assessment/csvExport');
-    const derived = scanData ? computeDerivedValues(record, scanData, sex) : undefined;
+    const derived = scanData
+      ? computeDerivedValues(record, scanData, sex)
+      : (sessionDerived ?? undefined);
     const csv = generateCSVExport(record, scores, derived);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `recompose-assessment-${record.id.slice(0, 8)}.csv`;
+    a.download = `recompose-assessment-${sessionBaseName(record)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

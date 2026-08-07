@@ -91,6 +91,8 @@ export interface AssessmentRecord {
   id: string;
   timestamp: string;       // ISO 8601
   scanId: string;
+  /** Researcher-entered participant/session identifier (optional). */
+  participantId?: string;
 
   actual: ActualMetrics;
 
