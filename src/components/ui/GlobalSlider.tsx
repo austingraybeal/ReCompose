@@ -1,20 +1,49 @@
 'use client';
 
 import { useMorphStore } from '@/lib/stores/morphStore';
+import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import { useViewStore } from '@/lib/stores/viewStore';
+import { useGenderStore } from '@/lib/stores/genderStore';
+import { useScanStore } from '@/lib/stores/scanStore';
+import { computeAndroidness } from '@/lib/morph/sensitivityModel';
+import { impliedBodyFatDelta } from '@/lib/morph/metricProjection';
 import { motion } from 'framer-motion';
 
 /**
  * Master body fat percentage slider with gradient track and hero display.
  * Uses a neutral color gradient (no red/green judgment).
+ *
+ * In linked mode the headline number reports the effective total —
+ * global BF plus the implied whole-body contribution of the segment
+ * overrides — while the slider thumb continues to track the global base.
  */
 export default function GlobalSlider() {
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
   const setGlobalBodyFat = useMorphStore((s) => s.setGlobalBodyFat);
+  const segmentOverrides = useMorphStore((s) => s.segmentOverrides);
+  const linkMode = useMorphStore((s) => s.linkMode);
+  const sex = useGenderStore((s) => s.gender);
+  const bodyComp = useScanStore((s) => s.scanData?.bodyComp);
+  const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
+  const showValues = useAssessmentStore((s) => s.showValues);
+  const isPreview = useViewStore((s) => s.appMode === 'preview');
+  // Blinded in BIDS tasks (unless revealed) and always in preview mode.
+  const hideNumbers = (isAssessmentMode && !showValues) || isPreview;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalBodyFat(parseFloat(e.target.value));
   };
+
+  const displayBodyFat =
+    linkMode === 'proportional'
+      ? Math.max(1, globalBodyFat +
+          impliedBodyFatDelta(
+            segmentOverrides,
+            sex,
+            computeAndroidness(sex, bodyComp?.waistToHipRatio),
+          ))
+      : globalBodyFat;
 
   const actualPosition = ((originalBodyFat - 5) / (55 - 5)) * 100;
 
@@ -27,18 +56,31 @@ export default function GlobalSlider() {
         <motion.div
           className="font-mono font-bold leading-none"
           style={{ fontSize: '52px', color: bfColor }}
-          key={Math.round(globalBodyFat)}
+          key={Math.round(displayBodyFat)}
           initial={{ opacity: 0.7, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'spring', damping: 20, stiffness: 200 }}
         >
-          {Math.round(globalBodyFat)}%
+          {hideNumbers ? '· · ·' : `${Math.round(displayBodyFat)}%`}
         </motion.div>
         <div className="pb-2">
           <div className="text-rc-xs uppercase tracking-[3px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>
             Body Fat
           </div>
         </div>
+        {!isAssessmentMode && Math.round(globalBodyFat) !== Math.round(originalBodyFat) && (
+          <button
+            onClick={() => setGlobalBodyFat(originalBodyFat)}
+            className="mb-2 ml-2 px-3 py-1.5 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
+            style={{
+              background: 'var(--rc-bg-elevated)',
+              color: 'var(--rc-text-secondary)',
+              border: '1px solid var(--rc-border-default)',
+            }}
+          >
+            Reset Global
+          </button>
+        )}
       </div>
 
       <div className="relative">
@@ -51,7 +93,8 @@ export default function GlobalSlider() {
             <div className="text-[9px] uppercase tracking-[1px] font-mono mb-0.5"
               style={{ color: 'var(--rc-text-dim)' }}
             >
-              ACTUAL
+              {/* "Actual" would prime participants during blinded flows */}
+              {isAssessmentMode || isPreview ? 'ORIGINAL' : 'ACTUAL'}
             </div>
             <div className="w-px h-5" style={{ background: 'var(--rc-text-dim)' }} />
           </div>
@@ -71,10 +114,13 @@ export default function GlobalSlider() {
           }}
         />
 
-        <div className="flex justify-between mt-2">
-          <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>5%</span>
-          <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>55%</span>
-        </div>
+        {/* Range anchors hidden during BIDS and preview so the scale isn't suggested */}
+        {!isAssessmentMode && !isPreview && (
+          <div className="flex justify-between mt-2">
+            <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>5%</span>
+            <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>55%</span>
+          </div>
+        )}
       </div>
     </div>
   );

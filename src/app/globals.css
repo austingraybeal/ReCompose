@@ -14,8 +14,8 @@
   /* Borders — more visible */
   --rc-border-default: #3a3e4c;
   --rc-border-subtle: #2e3240;
-  --rc-border-accent: rgba(62, 207, 180, 0.3);
-  --rc-border-active: rgba(62, 207, 180, 0.6);
+  --rc-border-accent: rgba(168, 98, 248, 0.3);
+  --rc-border-active: rgba(168, 98, 248, 0.6);
 
   /* Text — brighter */
   --rc-text-primary: #f0f1f4;
@@ -24,32 +24,38 @@
   --rc-text-inverse: #1a1d26;
 
   /* Accent */
-  --rc-accent: #3ecfb4;
-  --rc-accent-dim: rgba(62, 207, 180, 0.12);
-  --rc-accent-glow: rgba(62, 207, 180, 0.35);
+  --rc-accent: #a862f8;
+  --rc-accent-dim: rgba(168, 98, 248, 0.12);
+  --rc-accent-glow: rgba(168, 98, 248, 0.35);
 
   /* Body fat spectrum — neutral teal gradient (no red/green judgment) */
-  --rc-bf-lean: #3ecfb4;
-  --rc-bf-mid: #5db8d0;
+  --rc-bf-lean: #a862f8;
+  --rc-bf-mid: #8f6df0;
   --rc-bf-high: #7aa0e0;
   --rc-bf-very-high: #9088e8;
 
   /* Deltas — subtle, non-judgmental */
   --rc-delta-positive: #7aa0e0;
-  --rc-delta-negative: #5db8d0;
+  --rc-delta-negative: #8f6df0;
   --rc-delta-neutral: #808498;
 
-  /* Segment highlight colors */
-  --rc-seg-shoulders: #4ac8e8;
-  --rc-seg-arms: #5de8d0;
-  --rc-seg-torso: #4acfa0;
-  --rc-seg-waist: #5db8d0;
+  /* Segment highlight colors (8-segment) */
+  --rc-seg-shoulders: #7f9cf5;
+  --rc-seg-upper-arms: #7f9cff;
+  --rc-seg-forearms: #9689ff;
+  --rc-seg-torso: #b478ff;
+  --rc-seg-waist: #8f6df0;
   --rc-seg-hips: #7aa0e0;
-  --rc-seg-legs: #a78bfa;
+  --rc-seg-thighs: #a78bfa;
+  --rc-seg-calves: #c4a7ff;
+
+  /* Legacy aliases (6-segment) — kept for backward compat */
+  --rc-seg-arms: var(--rc-seg-upper-arms);
+  --rc-seg-legs: var(--rc-seg-thighs);
 
   /* Shadows */
   --rc-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.3);
-  --rc-shadow-glow: 0 0 20px rgba(62, 207, 180, 0.2);
+  --rc-shadow-glow: 0 0 20px rgba(168, 98, 248, 0.2);
 
   /* Typography */
   --rc-font-mono: 'Space Mono', 'SF Mono', 'Fira Code', monospace;
@@ -105,7 +111,7 @@ input[type='range']::-webkit-slider-thumb {
   background: var(--rc-accent);
   margin-top: -6px;
   border: 2px solid var(--rc-bg-elevated);
-  box-shadow: 0 0 8px rgba(62, 207, 180, 0.4);
+  box-shadow: 0 0 8px rgba(168, 98, 248, 0.4);
   transition: transform 100ms ease;
 }
 
@@ -124,6 +130,6 @@ input[type='range']::-moz-range-thumb {
   border-radius: 50%;
   background: var(--rc-accent);
   border: 2px solid var(--rc-bg-elevated);
-  box-shadow: 0 0 8px rgba(62, 207, 180, 0.4);
+  box-shadow: 0 0 8px rgba(168, 98, 248, 0.4);
   transition: transform 100ms ease;
 }

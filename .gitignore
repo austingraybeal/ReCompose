@@ -37,3 +37,7 @@ next-env.d.ts
 public/models/*.json
 # Keep the .pkl files out too
 *.pkl
+tools/harness/.harness.cjs
+tools/harness/node_modules/
+tools/harness/package.json
+tools/harness/package-lock.json

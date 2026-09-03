@@ -1,4 +1,6 @@
 import type { SegmentId } from './scan';
+import type { TaskTrajectoryMetrics } from '@/lib/assessment/trajectoryMetrics';
+import type { TaskId } from '@/lib/assessment/taskRegistry';
 
 /** Current slider state captured at a moment in time */
 export interface SliderState {
@@ -13,7 +15,11 @@ export interface AdjustmentEvent {
   value: number;
 }
 
-export type TaskType = 'perceived' | 'ideal' | 'partner';
+/**
+ * A task identifier. 'perceived' is always present; the remaining tasks
+ * are chosen per assessment from the task registry.
+ */
+export type TaskType = TaskId;
 
 /** Result from a single assessment task */
 export interface TaskResult {
@@ -38,33 +44,42 @@ export interface ActualMetrics {
 export interface SegmentDistortion {
   segmentId: SegmentId;
   label: string;
+  /** Perceived override vs actual (actual = 0 by construction). */
   perceivedDelta: number;
-  idealDelta: number;
-  partnerDelta: number;
+  /**
+   * Each non-perceived selected task's override minus the perceived
+   * override for this segment (task-vs-perceived discrepancy).
+   */
+  taskDeltas: Partial<Record<TaskType, number>>;
 }
 
-/** BIDS scores calculated from three tasks */
+/** BIDS scores calculated from the selected tasks */
 export interface BIDSScores {
-  // Global scores (BF% units)
+  /** Perceived global BF minus actual BF. */
   distortion: number;
-  dissatisfaction: number;
-  partnerDiscrepancy: number;
-
-  // Absolute magnitudes
   distortionMagnitude: number;
-  dissatisfactionMagnitude: number;
+
+  /**
+   * Global BF discrepancy of each non-perceived selected task vs the
+   * perceived body (task minus perceived).
+   */
+  taskDiscrepancies: Partial<Record<TaskType, number>>;
+
+  /** Convenience aliases when the corresponding task was selected. */
+  dissatisfaction?: number;        // ideal - perceived
+  dissatisfactionMagnitude?: number;
+  partnerDiscrepancy?: number;     // partner - perceived
 
   // Regional breakdown
   segmentDistortions: SegmentDistortion[];
 
   // Peak distortion segments
   maxDistortionSegment: SegmentId;
-  maxDissatisfactionSegment: SegmentId;
+  maxDissatisfactionSegment?: SegmentId;
 
   // Behavioral
-  perceivedTaskDuration: number;
-  idealTaskDuration: number;
-  partnerTaskDuration: number;
+  trajectories: Partial<Record<TaskType, TaskTrajectoryMetrics>>;
+  taskDurations: Partial<Record<TaskType, number>>;
   totalAssessmentDuration: number;
 
   // Flags
@@ -76,17 +91,26 @@ export interface AssessmentRecord {
   id: string;
   timestamp: string;       // ISO 8601
   scanId: string;
+  /** Researcher-entered participant/session identifier (optional). */
+  participantId?: string;
+
+  /**
+   * Coefficient profile active during this assessment: 'default' for the
+   * published model, or a tuned-profile hash from the research panel.
+   */
+  coefficientProfile?: string;
 
   actual: ActualMetrics;
 
-  tasks: {
-    perceived: TaskResult;
-    ideal: TaskResult;
-    partner: TaskResult;
-  };
+  /** Tasks administered in this assessment, in administration order. */
+  selectedTasks: TaskType[];
+  tasks: Partial<Record<TaskType, TaskResult>>;
 
   scores: BIDSScores;
+
+  /** Standardized questionnaire results, when administered. */
+  questionnaires?: import('@/lib/assessment/questionnaires').QuestionnaireResults;
 }
 
 /** Assessment flow step for the state machine */
-export type AssessmentStep = TaskType | 'welcome' | 'complete';
+export type AssessmentStep = TaskType | 'welcome' | 'questionnaires' | 'complete';

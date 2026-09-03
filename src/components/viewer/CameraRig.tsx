@@ -6,11 +6,13 @@ import { OrbitControls } from '@react-three/drei';
 import { useViewStore } from '@/lib/stores/viewStore';
 import { Vector3 } from 'three';
 
+// Body is normalized to unit height; these distances frame it at ~75% of
+// the canvas height (fov 40) so it doesn't start tiny on short viewports.
 const PRESET_POSITIONS: Record<string, [number, number, number]> = {
-  front: [0, 0.5, 2.5],
-  side: [2.5, 0.5, 0],
-  back: [0, 0.5, -2.5],
-  quarter: [1.8, 0.6, 1.8],
+  front: [0, 0.5, 1.9],
+  side: [1.9, 0.5, 0],
+  back: [0, 0.5, -1.9],
+  quarter: [1.4, 0.6, 1.4],
 };
 
 const TARGET = new Vector3(0, 0.45, 0);
@@ -47,7 +49,7 @@ function CameraAnimator() {
   });
 
   useEffect(() => {
-    camera.position.set(0, 0.5, 2.5);
+    camera.position.set(0, 0.5, 1.9);
     camera.lookAt(TARGET);
   }, [camera]);
 

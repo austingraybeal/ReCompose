@@ -10,88 +10,167 @@ import type {
 } from '@/types/assessment';
 import type { SegmentId } from '@/types/scan';
 import { calculateBIDSScores } from '@/lib/assessment/scoring';
+import {
+  TASK_DEFINITIONS,
+  DEFAULT_SELECTED_TASKS,
+  getTaskDefinition,
+} from '@/lib/assessment/taskRegistry';
+import { coefficientProfileHash } from '@/lib/morph/coefficientRegistry';
 
 interface AssessmentState {
   // Flow state
   isAssessmentMode: boolean;
   currentStep: AssessmentStep | null;
 
+  /** Tasks chosen for this assessment, in registry (administration) order. */
+  selectedTasks: TaskType[];
+
   // Task data
-  taskResults: {
-    perceived?: TaskResult;
-    ideal?: TaskResult;
-    partner?: TaskResult;
-  };
+  taskResults: Partial<Record<TaskType, TaskResult>>;
 
   // Current task tracking
   taskStartTime: number | null;
   adjustmentTrajectory: AdjustmentEvent[];
   resetCount: number;
 
-  // Canvas snapshots (data URLs) captured at each task confirm
-  snapshots: {
-    perceived?: string;
-    ideal?: string;
-    partner?: string;
-  };
+  /** In-task numeric readouts hidden by default during BIDS tasks. */
+  showValues: boolean;
+
+  /** Researcher-entered participant/session ID (optional). */
+  participantId: string;
+
+  /** Standardized questionnaires to administer after the tasks. */
+  selectedQuestionnaires: import('@/lib/assessment/questionnaires').QuestionnaireId[];
+  questionnaireResults:
+    | import('@/lib/assessment/questionnaires').QuestionnaireResults
+    | null;
+
+  /** Implied-measurement rows carried by a loaded session file, so the
+      results view can render without the original scan present. */
+  sessionDerived: import('@/lib/assessment/derivedValues').DerivedRow[] | null;
+
+  // Canvas snapshots (data URLs) captured at each task confirm, one per
+  // overlay combination so the results page can toggle ghost/segments on
+  // the static images after the fact.
+  snapshotSets: Partial<Record<TaskType, SnapshotSet>>;
 
   // Final record
   assessmentRecord: AssessmentRecord | null;
 
   // Actions
   startAssessment: () => void;
+  toggleTask: (task: TaskType) => void;
+  toggleShowValues: () => void;
+  setParticipantId: (id: string) => void;
+  toggleQuestionnaire: (
+    id: import('@/lib/assessment/questionnaires').QuestionnaireId,
+  ) => void;
+  submitQuestionnaires: (
+    results: import('@/lib/assessment/questionnaires').QuestionnaireResults,
+  ) => void;
+  /** Hydrate the store from a saved session file (results-only view). */
+  hydrateSession: (payload: {
+    record: AssessmentRecord;
+    snapshotSets: Partial<Record<TaskType, SnapshotSet>>;
+    derived: import('@/lib/assessment/derivedValues').DerivedRow[];
+  }) => void;
   beginFirstTask: () => void;
   recordAdjustment: (control: 'global' | SegmentId, value: number) => void;
   recordReset: () => void;
-  confirmTask: (finalState: SliderState, snapshot?: string) => void;
+  confirmTask: (finalState: SliderState, snaps?: SnapshotSet) => void;
   goBack: () => void;
   completeAssessment: (actual: ActualMetrics, scanId: string) => void;
   resetAssessment: () => void;
 }
 
-const TASK_ORDER: TaskType[] = ['perceived', 'ideal', 'partner'];
-
-function getNextStep(current: TaskType): AssessmentStep {
-  const idx = TASK_ORDER.indexOf(current);
-  if (idx < TASK_ORDER.length - 1) return TASK_ORDER[idx + 1];
-  return 'complete';
+/** One canvas capture per overlay combination. */
+export interface SnapshotSet {
+  plain?: string;
+  ghost?: string;
+  seg?: string;
+  ghostSeg?: string;
 }
 
-function getPrevStep(current: TaskType): AssessmentStep | null {
-  const idx = TASK_ORDER.indexOf(current);
-  if (idx > 0) return TASK_ORDER[idx - 1];
-  return null;
+/** Registry order is administration order; filter to the selection. */
+export function orderedSelection(selected: TaskType[]): TaskType[] {
+  return TASK_DEFINITIONS.filter((d) => selected.includes(d.id)).map((d) => d.id);
 }
 
 export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   isAssessmentMode: false,
   currentStep: null,
+  selectedTasks: [...DEFAULT_SELECTED_TASKS],
   taskResults: {},
   taskStartTime: null,
   adjustmentTrajectory: [],
   resetCount: 0,
-  snapshots: {},
+  showValues: false,
+  participantId: '',
+  selectedQuestionnaires: [],
+  questionnaireResults: null,
+  sessionDerived: null,
+  snapshotSets: {},
   assessmentRecord: null,
+
+  setParticipantId: (id) => set({ participantId: id }),
+
+  toggleQuestionnaire: (id) =>
+    set((s) => ({
+      selectedQuestionnaires: s.selectedQuestionnaires.includes(id)
+        ? s.selectedQuestionnaires.filter((x) => x !== id)
+        : [...s.selectedQuestionnaires, id],
+    })),
+
+  submitQuestionnaires: (results) =>
+    set({ questionnaireResults: results, currentStep: 'complete' }),
+
+  hydrateSession: ({ record, snapshotSets, derived }) =>
+    set({
+      assessmentRecord: record,
+      snapshotSets,
+      sessionDerived: derived,
+      participantId: record.participantId ?? '',
+      isAssessmentMode: false,
+      currentStep: null,
+    }),
 
   startAssessment: () =>
     set({
       isAssessmentMode: true,
       currentStep: 'welcome',
+      selectedTasks: [...DEFAULT_SELECTED_TASKS],
       taskResults: {},
       taskStartTime: null,
       adjustmentTrajectory: [],
       resetCount: 0,
-      snapshots: {},
+      showValues: false,
+      selectedQuestionnaires: [],
+      questionnaireResults: null,
+      snapshotSets: {},
       assessmentRecord: null,
     }),
 
-  beginFirstTask: () =>
+  toggleTask: (task) => {
+    if (getTaskDefinition(task).mandatory) return;
+    set((s) => ({
+      selectedTasks: s.selectedTasks.includes(task)
+        ? s.selectedTasks.filter((t) => t !== task)
+        : orderedSelection([...s.selectedTasks, task]),
+    }));
+  },
+
+  toggleShowValues: () => set((s) => ({ showValues: !s.showValues })),
+
+  beginFirstTask: () => {
+    const first = orderedSelection(get().selectedTasks)[0];
+    if (!first) return;
     set({
-      currentStep: 'perceived',
+      currentStep: first,
       taskStartTime: Date.now(),
       adjustmentTrajectory: [],
       resetCount: 0,
-    }),
+    });
+  },
 
   recordAdjustment: (control, value) => {
     const { taskStartTime, adjustmentTrajectory } = get();
@@ -108,10 +187,14 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
     set((s) => ({ resetCount: s.resetCount + 1 }));
   },
 
-  confirmTask: (finalState, snapshot) => {
-    const { currentStep, taskStartTime, adjustmentTrajectory, resetCount, taskResults, snapshots } = get();
+  confirmTask: (finalState, snaps) => {
+    const {
+      currentStep, taskStartTime, adjustmentTrajectory, resetCount,
+      taskResults, snapshotSets, selectedTasks,
+    } = get();
     if (!currentStep || currentStep === 'welcome' || currentStep === 'complete' || !taskStartTime) return;
 
+    const order = orderedSelection(selectedTasks);
     const taskType = currentStep as TaskType;
     const result: TaskResult = {
       taskType,
@@ -121,10 +204,16 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       resetCount,
     };
 
-    const nextStep = getNextStep(taskType);
+    const idx = order.indexOf(taskType);
+    const nextStep: AssessmentStep =
+      idx < order.length - 1
+        ? order[idx + 1]
+        : get().selectedQuestionnaires.length > 0
+          ? 'questionnaires'
+          : 'complete';
     set({
       taskResults: { ...taskResults, [taskType]: result },
-      snapshots: { ...snapshots, ...(snapshot ? { [taskType]: snapshot } : {}) },
+      snapshotSets: { ...snapshotSets, ...(snaps ? { [taskType]: snaps } : {}) },
       currentStep: nextStep,
       taskStartTime: nextStep !== 'complete' ? Date.now() : null,
       adjustmentTrajectory: [],
@@ -133,15 +222,13 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   },
 
   goBack: () => {
-    const { currentStep } = get();
-    if (!currentStep || currentStep === 'welcome' || currentStep === 'perceived') return;
-
-    const taskType = currentStep as TaskType;
-    const prevStep = getPrevStep(taskType);
-    if (!prevStep) return;
-
+    const { currentStep, selectedTasks } = get();
+    if (!currentStep || currentStep === 'welcome' || currentStep === 'complete') return;
+    const order = orderedSelection(selectedTasks);
+    const idx = order.indexOf(currentStep as TaskType);
+    if (idx <= 0) return;
     set({
-      currentStep: prevStep,
+      currentStep: order[idx - 1],
       taskStartTime: Date.now(),
       adjustmentTrajectory: [],
       resetCount: 0,
@@ -149,20 +236,24 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   },
 
   completeAssessment: (actual, scanId) => {
-    const { taskResults, snapshots } = get();
-    const perceived = taskResults.perceived;
-    const ideal = taskResults.ideal;
-    const partner = taskResults.partner;
-    if (!perceived || !ideal || !partner) return;
+    const { taskResults, selectedTasks, participantId, questionnaireResults } = get();
+    const order = orderedSelection(selectedTasks);
+    if (!order.every((t) => taskResults[t])) return;
 
-    const scores = calculateBIDSScores(perceived, ideal, partner, actual);
+    const scores = calculateBIDSScores(taskResults, order, actual);
     const record: AssessmentRecord = {
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       scanId,
+      ...(participantId.trim() ? { participantId: participantId.trim() } : {}),
+      coefficientProfile: coefficientProfileHash(),
       actual,
-      tasks: { perceived, ideal, partner },
+      selectedTasks: order,
+      tasks: { ...taskResults },
       scores,
+      ...(questionnaireResults && Object.keys(questionnaireResults).length > 0
+        ? { questionnaires: questionnaireResults }
+        : {}),
     };
 
     set({ assessmentRecord: record, currentStep: 'complete' });
@@ -172,11 +263,15 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
     set({
       isAssessmentMode: false,
       currentStep: null,
+      selectedTasks: [...DEFAULT_SELECTED_TASKS],
       taskResults: {},
       taskStartTime: null,
       adjustmentTrajectory: [],
       resetCount: 0,
-      snapshots: {},
+      showValues: false,
+      selectedQuestionnaires: [],
+      questionnaireResults: null,
+      snapshotSets: {},
       assessmentRecord: null,
     }),
 }));

@@ -1,20 +1,129 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useScanStore } from '@/lib/stores/scanStore';
+import { useViewStore, type AppMode } from '@/lib/stores/viewStore';
+import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import {
+  loadSessionFromBrowser,
+  parseSessionFile,
+  type SessionFile,
+} from '@/lib/assessment/sessionFile';
 import UploadZone from '@/components/ui/UploadZone';
+import BrandLogo from '@/components/ui/BrandLogo';
+import { useScanLoader } from '@/hooks/useScanLoader';
+import { useGenderStore, type BodyGender } from '@/lib/stores/genderStore';
 import { motion } from 'framer-motion';
+
+function ModeButton({
+  mode,
+  title,
+  desc,
+  selected,
+  onSelect,
+}: {
+  mode: AppMode;
+  title: string;
+  desc: string;
+  selected: boolean;
+  onSelect: (mode: AppMode) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(mode)}
+      className="flex-1 px-5 py-4 rounded-xl text-left transition-all duration-200"
+      style={{
+        background: selected
+          ? 'linear-gradient(135deg, rgba(168, 98, 248, 0.18), rgba(168, 98, 248, 0.06))'
+          : 'var(--rc-bg-elevated)',
+        border: selected
+          ? '2px solid var(--rc-accent)'
+          : '1px solid var(--rc-border-default)',
+        boxShadow: selected ? '0 0 24px rgba(168, 98, 248, 0.15)' : 'none',
+      }}
+    >
+      <div
+        className="font-mono font-bold text-rc-base mb-1"
+        style={{ color: selected ? 'var(--rc-accent)' : 'var(--rc-text-primary)' }}
+      >
+        {title}
+      </div>
+      <div className="text-rc-xs leading-relaxed" style={{ color: 'var(--rc-text-secondary)' }}>
+        {desc}
+      </div>
+    </button>
+  );
+}
 
 export default function HomePage() {
   const router = useRouter();
   const scanData = useScanStore((s) => s.scanData);
+  const appMode = useViewStore((s) => s.appMode);
+  const setAppMode = useViewStore((s) => s.setAppMode);
+  const hydrateSession = useAssessmentStore((s) => s.hydrateSession);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [savedSession, setSavedSession] = useState<SessionFile | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const { loadScan } = useScanLoader();
+  const setGender = useGenderStore((s) => s.setGender);
+  const setScanFileName = useScanStore((s) => s.setScanFileName);
+  const [previewLoading, setPreviewLoading] = useState<'female' | 'male' | null>(null);
+  const [previewError, setPreviewError] = useState(false);
 
+  // Blinded familiarization: load a bundled default avatar (no values
+  // shown anywhere) so participants can explore an opposite-sex body
+  // before their own BIDS assessment without being unblinded.
+  const startPreview = async (sex: Exclude<BodyGender, 'neutral'>) => {
+    if (previewLoading) return;
+    setPreviewError(false);
+    setPreviewLoading(sex);
+    try {
+      const [obj, measures, comp] = await Promise.all([
+        fetch(`/preview/${sex}.obj`).then((r) => { if (!r.ok) throw new Error(); return r.text(); }),
+        fetch(`/preview/${sex}-measures.csv`).then((r) => { if (!r.ok) throw new Error(); return r.text(); }),
+        fetch(`/preview/${sex}-composition.csv`).then((r) => { if (!r.ok) throw new Error(); return r.text(); }),
+      ]);
+      setGender(sex);
+      setScanFileName(`preview-${sex}`);
+      await loadScan(obj, measures, comp);
+      setAppMode('preview'); // the scanData+appMode effect routes to /viewer
+    } catch {
+      setPreviewError(true);
+      setPreviewLoading(null);
+    }
+  };
+
+  // Surface the auto-backed-up session, if one exists.
   useEffect(() => {
-    if (scanData) {
+    setSavedSession(loadSessionFromBrowser());
+  }, []);
+
+  const openSession = (file: SessionFile) => {
+    hydrateSession({
+      record: file.record,
+      snapshotSets: file.snapshotSets,
+      derived: file.derived,
+    });
+    router.push('/session');
+  };
+
+  const handleSessionFile = async (f: File) => {
+    const parsed = parseSessionFile(await f.text());
+    if (parsed) {
+      setLoadError(false);
+      openSession(parsed);
+    } else {
+      setLoadError(true);
+    }
+  };
+
+  // A mode must be chosen before the viewer opens.
+  useEffect(() => {
+    if (scanData && appMode) {
       router.push('/viewer');
     }
-  }, [scanData, router]);
+  }, [scanData, appMode, router]);
 
   return (
     <div
@@ -25,7 +134,7 @@ export default function HomePage() {
       <div
         className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full pointer-events-none"
         style={{
-          background: 'radial-gradient(circle, rgba(62, 207, 180, 0.06) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(168, 98, 248, 0.06) 0%, transparent 70%)',
         }}
       />
 
@@ -35,31 +144,85 @@ export default function HomePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, ease: 'easeOut' }}
       >
-        {/* Logo mark */}
-        <div className="mx-auto mb-6 w-20 h-20 rounded-full flex items-center justify-center"
-          style={{
-            background: 'linear-gradient(135deg, rgba(62, 207, 180, 0.15), rgba(62, 207, 180, 0.05))',
-            border: '2px solid rgba(62, 207, 180, 0.25)',
-            boxShadow: '0 0 40px rgba(62, 207, 180, 0.15)',
-          }}
-        >
-          <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--rc-accent)" strokeWidth="1.5">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" strokeLinecap="round" />
-            <path d="M12 6v12M8 9l4-3 4 3M8 15l4 3 4-3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+        {/* Logo mark — clamps down on short laptop viewports */}
+        <div className="mx-auto mb-5 flex items-center justify-center">
+          <BrandLogo size={180} cssSize="min(180px, 19vh)" />
         </div>
 
         <h1
           className="font-mono font-bold tracking-tight"
-          style={{ fontSize: '42px', color: 'var(--rc-text-primary)' }}
+          style={{ fontSize: 'clamp(40px, 7vh, 64px)', color: 'var(--rc-text-primary)' }}
         >
           Re<span style={{ color: 'var(--rc-accent)' }}>Compose</span>
         </h1>
         <p className="text-rc-base mt-2 tracking-wide uppercase"
           style={{ color: 'var(--rc-text-dim)', letterSpacing: '3px', fontSize: '11px' }}
         >
-          See your future form
+          Perception, Measured
         </p>
+      </motion.div>
+
+      <motion.div
+        className="w-full max-w-xl relative z-10 mb-8"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, delay: 0.1 }}
+      >
+        <div
+          className="text-center text-[10px] uppercase tracking-[3px] font-mono mb-3"
+          style={{ color: appMode ? 'var(--rc-text-dim)' : 'var(--rc-accent)' }}
+        >
+          {appMode ? 'Mode selected' : 'Select a mode to continue'}
+        </div>
+        <div className="flex gap-3">
+          <ModeButton
+            mode="free"
+            title="FreeCompose"
+            desc="Explore the avatar freely — adjust global body fat and every segment with live metrics."
+            selected={appMode === 'free'}
+            onSelect={setAppMode}
+          />
+          <ModeButton
+            mode="bids"
+            title="BIDS Mode"
+            desc="Go directly to the body image assessment. The avatar is not shown until the tasks begin."
+            selected={appMode === 'bids'}
+            onSelect={setAppMode}
+          />
+        </div>
+
+        {/* Blinded default-avatar previews (no values shown anywhere) */}
+        <div className="mt-3 flex items-center justify-center gap-2">
+          <span className="text-[10px] uppercase tracking-[2px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+            Familiarization
+          </span>
+          {(['female', 'male'] as const).map((sex) => (
+            <button
+              key={sex}
+              onClick={() => startPreview(sex)}
+              disabled={previewLoading !== null}
+              className="px-3.5 py-1.5 rounded-full text-rc-xs font-mono tracking-wide transition-all duration-150"
+              style={{
+                background: previewLoading === sex ? 'rgba(168, 98, 248, 0.15)' : 'var(--rc-bg-elevated)',
+                color: previewLoading === sex ? 'var(--rc-accent)' : 'var(--rc-text-secondary)',
+                border: '1px solid var(--rc-border-default)',
+                opacity: previewLoading && previewLoading !== sex ? 0.5 : 1,
+              }}
+            >
+              {previewLoading === sex
+                ? 'Loading…'
+                : `Preview ${sex === 'female' ? 'Female' : 'Male'}`}
+            </button>
+          ))}
+          {previewError && (
+            <span className="text-rc-xs font-mono" style={{ color: '#e0445a' }}>
+              Preview failed to load.
+            </span>
+          )}
+        </div>
+        <div className="mt-1.5 text-center text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+          Explore a default avatar with all values hidden — no upload needed.
+        </div>
       </motion.div>
 
       <motion.div
@@ -71,32 +234,56 @@ export default function HomePage() {
         <UploadZone />
       </motion.div>
 
+      {/* Saved-session entry points */}
       <motion.div
-        className="mt-14 text-center max-w-sm relative z-10"
+        className="mt-6 flex flex-wrap items-center justify-center gap-3 relative z-10"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.7, delay: 0.3 }}
+        transition={{ duration: 0.7, delay: 0.25 }}
       >
-        <p className="text-rc-sm leading-relaxed" style={{ color: 'var(--rc-text-dim)' }}>
-          Upload your 3D body scan to visualize and explore body composition changes in real time.
-        </p>
-        <div className="flex items-center justify-center gap-3 mt-5">
-          {['OBJ Mesh', 'Core Measures', 'Body Comp'].map((label, i) => (
-            <span key={label} className="flex items-center gap-3">
-              <span
-                className="px-2.5 py-1 rounded-full text-rc-xs font-mono"
-                style={{
-                  background: 'rgba(62, 207, 180, 0.08)',
-                  border: '1px solid rgba(62, 207, 180, 0.15)',
-                  color: 'var(--rc-text-secondary)',
-                }}
-              >
-                {label}
-              </span>
-              {i < 2 && <span style={{ color: 'var(--rc-border-default)' }}>+</span>}
-            </span>
-          ))}
-        </div>
+        {savedSession && (
+          <button
+            onClick={() => openSession(savedSession)}
+            className="px-4 py-2 rounded-lg font-mono text-rc-xs tracking-wide transition-all duration-150"
+            style={{
+              background: 'rgba(168, 98, 248, 0.1)',
+              color: 'var(--rc-accent)',
+              border: '1px solid rgba(168, 98, 248, 0.3)',
+            }}
+          >
+            Restore last session
+            {savedSession.record.participantId ? ` (${savedSession.record.participantId})` : ''}
+            {' · '}
+            {new Date(savedSession.savedAt).toLocaleString()}
+          </button>
+        )}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="px-4 py-2 rounded-lg font-mono text-rc-xs tracking-wide transition-all duration-150"
+          style={{
+            background: 'var(--rc-bg-elevated)',
+            color: 'var(--rc-text-secondary)',
+            border: '1px solid var(--rc-border-default)',
+          }}
+        >
+          Load Session File
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleSessionFile(f);
+            e.target.value = '';
+          }}
+        />
+        {loadError && (
+          <span className="text-rc-xs font-mono" style={{ color: '#e0445a' }}>
+            Not a valid ReCompose session file.
+          </span>
+        )}
       </motion.div>
     </div>
   );

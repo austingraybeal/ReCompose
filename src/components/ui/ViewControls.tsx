@@ -29,11 +29,11 @@ export default function ViewControls() {
             className="flex-1 px-2 py-1.5 rounded-lg text-rc-xs font-mono transition-all duration-200 text-center"
             style={{
               background: cameraPreset === preset.id
-                ? 'linear-gradient(135deg, rgba(62, 207, 180, 0.15), rgba(62, 207, 180, 0.05))'
+                ? 'linear-gradient(135deg, rgba(168, 98, 248, 0.15), rgba(168, 98, 248, 0.05))'
                 : 'var(--rc-bg-elevated)',
               color: cameraPreset === preset.id ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
               border: cameraPreset === preset.id
-                ? '1px solid rgba(62, 207, 180, 0.25)'
+                ? '1px solid rgba(168, 98, 248, 0.25)'
                 : '1px solid var(--rc-border-default)',
             }}
           >

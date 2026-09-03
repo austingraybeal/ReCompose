@@ -7,19 +7,16 @@ import { useMorphStore } from '@/lib/stores/morphStore';
 import { useViewStore } from '@/lib/stores/viewStore';
 import { useGenderStore } from '@/lib/stores/genderStore';
 import { deformMesh } from '@/lib/morph/morphEngine';
+import { computeAndroidness } from '@/lib/morph/sensitivityModel';
 import type { Mesh, Intersection } from 'three';
-import { Color, BufferAttribute } from 'three';
+import { Color, BufferAttribute, Plane, Vector3, DoubleSide } from 'three';
+import { SEGMENT_COLOR_HEX } from '@/lib/constants/segmentColors';
 
 const MESH_COLOR = new Color('#bccad8');
 
-const SEGMENT_COLORS: Record<string, Color> = {
-  shoulders: new Color('#4ac8e8'),
-  arms: new Color('#5de8d0'),
-  torso: new Color('#4acfa0'),
-  waist: new Color('#f0c84a'),
-  hips: new Color('#f0764a'),
-  legs: new Color('#a78bfa'),
-};
+const SEGMENT_COLORS: Record<string, Color> = Object.fromEntries(
+  Object.entries(SEGMENT_COLOR_HEX).map(([id, hex]) => [id, new Color(hex)]),
+);
 
 export default function BodyMesh() {
   const meshRef = useRef<Mesh>(null);
@@ -42,6 +39,17 @@ export default function BodyMesh() {
     return scanData.geometry.clone();
   }, [scanData]);
 
+  // Render-only decapitation: clip everything above the collar. The head
+  // carries no body-fat information (its sensitivity is ~0) and its fixed
+  // size made every morphed body read strangely. Purely a GPU clipping
+  // plane — the deformation pipeline is untouched.
+  const clipPlanes = useMemo(() => {
+    if (!scanData) return [];
+    const collar = scanData.rings.find((r) => r.name === 'Collar');
+    const neckCutY = (collar?.height ?? 0.86) + 0.01;
+    return [new Plane(new Vector3(0, -1, 0), neckCutY)];
+  }, [scanData]);
+
   // Apply morph deformation
   useFrame(() => {
     if (!meshRef.current || !scanData || !clonedGeometry) return;
@@ -60,7 +68,9 @@ export default function BodyMesh() {
       deltaBodyFat,
       segmentOverrides,
       scanData.adjacency,
-      gender
+      gender,
+      scanData.armThreshold,
+      computeAndroidness(gender, scanData.bodyComp?.waistToHipRatio)
     );
 
     positions.needsUpdate = true;
@@ -77,7 +87,7 @@ export default function BodyMesh() {
         const seg = scanData.vertexBindings[i].segmentId;
         const isHovered = hoveredSegment === seg;
         const color = SEGMENT_COLORS[seg] ?? MESH_COLOR;
-        const intensity = isHovered ? 1.0 : 0.3;
+        const intensity = isHovered ? 1.0 : 0.75;
         colors[i * 3] = color.r * intensity + MESH_COLOR.r * (1 - intensity);
         colors[i * 3 + 1] = color.g * intensity + MESH_COLOR.g * (1 - intensity);
         colors[i * 3 + 2] = color.b * intensity + MESH_COLOR.b * (1 - intensity);
@@ -127,12 +137,20 @@ export default function BodyMesh() {
       onPointerOut={handlePointerOut}
       onClick={handleClick}
     >
+      {/* DoubleSide fills the armpit webbing strips (one-sided scan
+          geometry read as holes when their backs faced the camera).
+          key: toggling vertexColors is a shader-compile-time switch in
+          three.js — flipping the flag on a live material does nothing
+          until the program rebuilds, so remount the material instead. */}
       <meshStandardMaterial
+        key={segmentHighlight ? 'seg-colors' : 'plain'}
         color={MESH_COLOR}
         roughness={0.7}
         metalness={0.05}
         wireframe={wireframe}
         vertexColors={segmentHighlight}
+        side={DoubleSide}
+        clippingPlanes={clipPlanes}
       />
     </mesh>
   );

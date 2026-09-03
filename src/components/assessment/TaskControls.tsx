@@ -1,30 +1,31 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
+import { useViewStore } from '@/lib/stores/viewStore';
 import type { TaskType } from '@/types/assessment';
 import type { SegmentId } from '@/types/scan';
+import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 
 interface TaskControlsProps {
   taskType: TaskType;
-  onCaptureSnapshot: () => string | undefined;
+  onCaptureSnapshot: () => Promise<import('@/lib/stores/assessmentStore').SnapshotSet>;
 }
 
-const CONFIRM_LABELS: Record<TaskType, string> = {
-  perceived: 'Confirm Perceived Body',
-  ideal: 'Confirm Ideal Body',
-  partner: 'Confirm Partner Preference',
-};
-
 export default function TaskControls({ taskType, onCaptureSnapshot }: TaskControlsProps) {
-  const [confirming, setConfirming] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [, setConfirmed] = useState(false);
 
   const confirmTask = useAssessmentStore((s) => s.confirmTask);
   const goBack = useAssessmentStore((s) => s.goBack);
   const recordReset = useAssessmentStore((s) => s.recordReset);
+  const showValues = useAssessmentStore((s) => s.showValues);
+  const toggleShowValues = useAssessmentStore((s) => s.toggleShowValues);
+  const ghostOverlay = useViewStore((s) => s.ghostOverlay);
+  const toggleGhostOverlay = useViewStore((s) => s.toggleGhostOverlay);
+  const segmentHighlight = useViewStore((s) => s.segmentHighlight);
+  const toggleSegmentHighlight = useViewStore((s) => s.toggleSegmentHighlight);
 
   const originalBodyFat = useMorphStore((s) => s.originalBodyFat);
   const globalBodyFat = useMorphStore((s) => s.globalBodyFat);
@@ -40,32 +41,24 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
     recordReset();
   }, [setGlobalBodyFat, originalBodyFat, resetRegionalOverrides, recordReset]);
 
-  const handleConfirmClick = useCallback(() => {
-    if (!confirming) {
-      setConfirming(true);
-      return;
-    }
-    // Second click confirms
-    const snapshot = onCaptureSnapshot();
+  const handleConfirmClick = useCallback(async () => {
+    // Single-click confirm (double-confirmation removed by design).
+    const snaps = await onCaptureSnapshot();
     confirmTask(
       {
         globalBodyFat,
         segmentOverrides: { ...segmentOverrides } as Record<SegmentId, number>,
       },
-      snapshot
+      snaps
     );
     setConfirmed(true);
     // Reset sliders to actual for next task
     setGlobalBodyFat(originalBodyFat);
     resetRegionalOverrides();
   }, [
-    confirming, onCaptureSnapshot, confirmTask, globalBodyFat,
+    onCaptureSnapshot, confirmTask, globalBodyFat,
     segmentOverrides, setGlobalBodyFat, originalBodyFat, resetRegionalOverrides,
   ]);
-
-  const handleCancelConfirm = useCallback(() => {
-    setConfirming(false);
-  }, []);
 
   const handleGoBack = useCallback(() => {
     // Reset sliders to actual before going back
@@ -74,10 +67,9 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
     goBack();
   }, [setGlobalBodyFat, originalBodyFat, resetRegionalOverrides, goBack]);
 
-  // Reset confirming state when taskType changes
+  // Reset confirmed state when taskType changes
   useEffect(() => {
     setConfirmed(false);
-    setConfirming(false);
   }, [taskType]);
 
   return (
@@ -97,7 +89,7 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
         </button>
       )}
 
-      {/* Reset to Actual */}
+      {/* Reset */}
       <button
         onClick={handleResetToActual}
         className="px-3 py-2 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
@@ -107,67 +99,73 @@ export default function TaskControls({ taskType, onCaptureSnapshot }: TaskContro
           border: '1px solid var(--rc-border-default)',
         }}
       >
-        Reset to Actual
+        Reset
+      </button>
+
+      {/* Numeric readouts are hidden by default during BIDS tasks; this
+          toggle reveals them (data records either way). */}
+      <button
+        onClick={toggleShowValues}
+        className="px-3 py-2 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
+        style={{
+          background: showValues ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
+          color: showValues ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+          border: showValues
+            ? '1px solid rgba(168, 98, 248, 0.3)'
+            : '1px solid var(--rc-border-default)',
+        }}
+      >
+        {showValues ? 'Hide Values' : 'Show Values'}
+      </button>
+
+      {/* Ghost shell toggle — off by default during BIDS tasks */}
+      <button
+        onClick={toggleGhostOverlay}
+        className="px-3 py-2 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
+        style={{
+          background: ghostOverlay ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
+          color: ghostOverlay ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+          border: ghostOverlay
+            ? '1px solid rgba(168, 98, 248, 0.3)'
+            : '1px solid var(--rc-border-default)',
+        }}
+      >
+        Ghost {ghostOverlay ? 'On' : 'Off'}
+      </button>
+
+      {/* Segment-region tint toggle */}
+      <button
+        onClick={toggleSegmentHighlight}
+        className="px-3 py-2 rounded-lg text-rc-xs font-mono tracking-wide transition-all duration-150"
+        style={{
+          background: segmentHighlight ? 'rgba(168, 98, 248, 0.12)' : 'var(--rc-bg-elevated)',
+          color: segmentHighlight ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
+          border: segmentHighlight
+            ? '1px solid rgba(168, 98, 248, 0.3)'
+            : '1px solid var(--rc-border-default)',
+        }}
+      >
+        Segments {segmentHighlight ? 'On' : 'Off'}
       </button>
 
       <div className="flex-1" />
 
       {/* Confirm / Are you sure */}
-      <AnimatePresence mode="wait">
-        {confirming ? (
-          <motion.div
-            key="confirm-prompt"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="flex items-center gap-2"
-          >
-            <span className="text-rc-xs font-mono" style={{ color: 'var(--rc-text-secondary)' }}>
-              Are you sure?
-            </span>
-            <button
-              onClick={handleCancelConfirm}
-              className="px-3 py-2 rounded-lg text-rc-xs font-mono transition-all duration-150"
-              style={{
-                background: 'var(--rc-bg-elevated)',
-                color: 'var(--rc-text-secondary)',
-                border: '1px solid var(--rc-border-default)',
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirmClick}
-              className="px-5 py-2.5 rounded-xl font-mono font-bold text-rc-sm tracking-wide transition-all duration-200"
-              style={{
-                background: 'linear-gradient(135deg, var(--rc-accent), #2aa88e)',
-                color: '#0a0b0f',
-                boxShadow: '0 4px 16px rgba(62, 207, 180, 0.3)',
-              }}
-            >
-              Confirm
-            </button>
-          </motion.div>
-        ) : (
-          <motion.button
-            key="confirm-button"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            onClick={handleConfirmClick}
-            className="px-6 py-2.5 rounded-xl font-mono font-bold text-rc-sm tracking-wide transition-all duration-200"
-            style={{
-              background: 'linear-gradient(135deg, var(--rc-accent), #2aa88e)',
-              color: '#0a0b0f',
-              boxShadow: '0 4px 16px rgba(62, 207, 180, 0.25)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(62, 207, 180, 0.4)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(62, 207, 180, 0.25)'; }}
-          >
-            {CONFIRM_LABELS[taskType]}
-          </motion.button>
-        )}
-      </AnimatePresence>
+      <motion.button
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        onClick={handleConfirmClick}
+        className="px-6 py-2.5 rounded-xl font-mono font-bold text-rc-sm tracking-wide transition-all duration-200"
+        style={{
+          background: 'linear-gradient(135deg, var(--rc-accent), #4d1979)',
+          color: '#0a0b0f',
+          boxShadow: '0 4px 16px rgba(168, 98, 248, 0.25)',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(168, 98, 248, 0.4)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(168, 98, 248, 0.25)'; }}
+      >
+        {getTaskDefinition(taskType).confirmLabel}
+      </motion.button>
     </div>
   );
 }

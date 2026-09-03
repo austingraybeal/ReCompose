@@ -15,11 +15,11 @@ function ToggleButton({ label, active, onClick }: ToggleButtonProps) {
       className="px-3.5 py-1.5 rounded-full text-rc-xs font-mono tracking-wide transition-all duration-200"
       style={{
         background: active
-          ? 'linear-gradient(135deg, rgba(62, 207, 180, 0.2), rgba(62, 207, 180, 0.08))'
+          ? 'linear-gradient(135deg, rgba(168, 98, 248, 0.2), rgba(168, 98, 248, 0.08))'
           : 'transparent',
         color: active ? 'var(--rc-accent)' : 'var(--rc-text-dim)',
-        border: active ? '1px solid rgba(62, 207, 180, 0.3)' : '1px solid var(--rc-border-default)',
-        boxShadow: active ? '0 0 12px rgba(62, 207, 180, 0.1)' : 'none',
+        border: active ? '1px solid rgba(168, 98, 248, 0.3)' : '1px solid var(--rc-border-default)',
+        boxShadow: active ? '0 0 12px rgba(168, 98, 248, 0.1)' : 'none',
       }}
     >
       {label}

@@ -1,106 +1,244 @@
 import type { AssessmentRecord, BIDSScores } from '@/types/assessment';
+import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
+import { getTaskDefinition } from './taskRegistry';
+import { QUESTIONNAIRES, questionnaireItems } from './questionnaires';
+import type { DerivedRow } from './derivedValues';
 
 /**
  * Generate CSV export of assessment scores for SPSS/R/Excel import.
+ * Adapts to whatever task set was administered (record.selectedTasks).
+ *
+ * Structure (sections separated by blank lines, each with its own header
+ * row — split on the '#' marker lines for programmatic import):
+ *   1. Wide single-row summary: endpoints, BIDS scores, per-task global
+ *      discrepancies vs perceived, durations, and per-task trajectory
+ *      summaries.
+ *   2. '# trajectory_metrics' — long format, one row per task x control.
+ *   3. '# raw_adjustment_events' — the complete adjustment stream.
  */
-export function generateCSVExport(record: AssessmentRecord, scores: BIDSScores): string {
+export function generateCSVExport(
+  record: AssessmentRecord,
+  scores: BIDSScores,
+  derived?: DerivedRow[],
+): string {
+  const tasks = record.selectedTasks;
+  const comparisons = tasks.filter((t) => t !== 'perceived');
+  // Administered questionnaires in registry order
+  const administeredQ = QUESTIONNAIRES.filter((d) => record.questionnaires?.[d.id]).map(
+    (d) => ({ id: d.id, def: d, result: record.questionnaires![d.id]! }),
+  );
+
   const headers = [
     'assessment_id',
+    'participant_id',
+    'scan_id',
     'timestamp',
+    'selected_tasks',
     'actual_bf',
     'actual_weight',
     'actual_bmi',
     'actual_waist',
     'actual_hip',
     'actual_whr',
-    'perceived_global_bf',
-    'ideal_global_bf',
-    'partner_global_bf',
-    'perceived_shoulders',
-    'perceived_arms',
-    'perceived_torso',
-    'perceived_waist',
-    'perceived_hips',
-    'perceived_legs',
-    'ideal_shoulders',
-    'ideal_arms',
-    'ideal_torso',
-    'ideal_waist',
-    'ideal_hips',
-    'ideal_legs',
-    'partner_shoulders',
-    'partner_arms',
-    'partner_torso',
-    'partner_waist',
-    'partner_hips',
-    'partner_legs',
+    ...tasks.map((t) => `${t}_global_bf`),
+    ...comparisons.map((t) => `${t}_vs_perceived_global_bf`),
+    ...tasks.flatMap((t) => SEGMENT_ORDER.map((id) => `${t}_${id}`)),
     'bids_distortion',
-    'bids_dissatisfaction',
-    'bids_partner_discrepancy',
     'distortion_magnitude',
-    'dissatisfaction_magnitude',
     'max_distortion_segment',
-    'max_dissatisfaction_segment',
-    'perceived_duration_ms',
-    'ideal_duration_ms',
-    'partner_duration_ms',
+    ...tasks.map((t) => `${t}_duration_ms`),
     'total_duration_ms',
-    'perceived_resets',
-    'ideal_resets',
-    'partner_resets',
+    ...tasks.map((t) => `${t}_resets`),
+    'coefficient_profile',
+    ...administeredQ.flatMap(({ id, result }) =>
+      result.scores.map((sc) => `${id}_${sc.key}`),
+    ),
+    ...tasks.flatMap((t) => [
+      `${t}_traj_adjustments`,
+      `${t}_traj_path_length`,
+      `${t}_traj_reversals`,
+      `${t}_traj_visits`,
+      `${t}_traj_revisits`,
+      `${t}_traj_peak_overshoot`,
+      `${t}_traj_longest_dwell_control`,
+    ]),
     'clinical_flag',
   ];
 
-  const p = record.tasks.perceived.finalState;
-  const i = record.tasks.ideal.finalState;
-  const pt = record.tasks.partner.finalState;
-
-  const values = [
+  const values: (string | number)[] = [
     record.id,
+    `"${record.participantId ?? ''}"`,
+    `"${record.scanId}"`,
     record.timestamp,
+    `"${tasks.join('>')}"`,
     record.actual.bodyFat,
     record.actual.weight,
     record.actual.bmi,
     record.actual.waistCirc,
     record.actual.hipCirc,
     record.actual.whr,
-    p.globalBodyFat,
-    i.globalBodyFat,
-    pt.globalBodyFat,
-    p.segmentOverrides.shoulders,
-    p.segmentOverrides.arms,
-    p.segmentOverrides.torso,
-    p.segmentOverrides.waist,
-    p.segmentOverrides.hips,
-    p.segmentOverrides.legs,
-    i.segmentOverrides.shoulders,
-    i.segmentOverrides.arms,
-    i.segmentOverrides.torso,
-    i.segmentOverrides.waist,
-    i.segmentOverrides.hips,
-    i.segmentOverrides.legs,
-    pt.segmentOverrides.shoulders,
-    pt.segmentOverrides.arms,
-    pt.segmentOverrides.torso,
-    pt.segmentOverrides.waist,
-    pt.segmentOverrides.hips,
-    pt.segmentOverrides.legs,
+    ...tasks.map((t) => record.tasks[t]!.finalState.globalBodyFat),
+    ...comparisons.map((t) => (scores.taskDiscrepancies[t] ?? 0).toFixed(2)),
+    ...tasks.flatMap((t) =>
+      SEGMENT_ORDER.map((id) => record.tasks[t]!.finalState.segmentOverrides[id]),
+    ),
     scores.distortion,
-    scores.dissatisfaction,
-    scores.partnerDiscrepancy,
     scores.distortionMagnitude,
-    scores.dissatisfactionMagnitude,
     scores.maxDistortionSegment,
-    scores.maxDissatisfactionSegment,
-    scores.perceivedTaskDuration,
-    scores.idealTaskDuration,
-    scores.partnerTaskDuration,
+    ...tasks.map((t) => scores.taskDurations[t] ?? 0),
     scores.totalAssessmentDuration,
-    record.tasks.perceived.resetCount,
-    record.tasks.ideal.resetCount,
-    record.tasks.partner.resetCount,
+    ...tasks.map((t) => record.tasks[t]!.resetCount),
+    `"${record.coefficientProfile ?? 'default'}"`,
+    ...administeredQ.flatMap(({ result }) => result.scores.map((sc) => sc.value)),
+    ...tasks.flatMap((t) => {
+      const m = scores.trajectories[t];
+      if (!m) return [0, '0', 0, 0, 0, '0', ''];
+      const visits = m.perControl.reduce((sum, c) => sum + c.visitCount, 0);
+      const peakOvershoot = Math.max(0, ...m.perControl.map((c) => c.overshootMagnitude));
+      return [
+        m.totalAdjustments,
+        m.totalPathLength.toFixed(2),
+        m.totalDirectionReversals,
+        visits,
+        m.totalRevisits,
+        peakOvershoot.toFixed(2),
+        m.longestDwellControl ?? '',
+      ];
+    }),
     scores.clinicalFlag ? 1 : 0,
   ];
 
-  return headers.join(',') + '\n' + values.join(',') + '\n';
+  const lines: string[] = [
+    '# ReCompose BIDS Assessment Export',
+    `# scan: ${record.scanId}  |  exported: ${record.timestamp}`,
+    '',
+    '# summary',
+    headers.join(','),
+    values.join(','),
+  ];
+
+  // Derived real-world values implied by each task's avatar state
+  if (derived && derived.length > 0) {
+    lines.push('');
+    lines.push('# derived_measurements');
+    lines.push(
+      ['measure', 'unit', 'actual', ...tasks.map((t) => t), ...tasks.map((t) => `${t}_delta_vs_actual`)].join(','),
+    );
+    for (const row of derived) {
+      lines.push(
+        [
+          `"${row.label}"`,
+          row.unit,
+          row.actual,
+          ...tasks.map((t) => row.perTask[t] ?? ''),
+          ...tasks.map((t) => {
+            const v = row.perTask[t];
+            return v === undefined ? '' : (v - row.actual).toFixed(row.precision ?? 1);
+          }),
+        ].join(','),
+      );
+    }
+  }
+
+  // Engagement order matrix: one row per task, one column per control,
+  // cell = the rank at which the control was first touched ('untouched'
+  // when it was never moved).
+  lines.push('');
+  lines.push('# engagement_order');
+  lines.push(['task', 'task_label', 'global', ...SEGMENT_ORDER].join(','));
+  for (const t of tasks) {
+    const traj = scores.trajectories[t];
+    const rank = (control: string): string => {
+      const c = traj?.perControl.find((p) => p.control === control);
+      return c && c.firstTouchOrder > 0 ? String(c.firstTouchOrder) : 'untouched';
+    };
+    lines.push(
+      [
+        t,
+        `"${getTaskDefinition(t).shortLabel}"`,
+        rank('global'),
+        ...SEGMENT_ORDER.map((id) => rank(id)),
+      ].join(','),
+    );
+  }
+
+  // Section 2: per-control trajectory metrics (long format)
+  lines.push('');
+  lines.push('# trajectory_metrics');
+  lines.push(
+    [
+      'assessment_id',
+      'task',
+      'task_label',
+      'control',
+      'adjustment_count',
+      'path_length',
+      'direction_reversals',
+      'overshoot_magnitude',
+      'dwell_time_ms',
+      'visit_count',
+      'revisit_count',
+      'first_touch_order',
+    ].join(','),
+  );
+  for (const t of tasks) {
+    const traj = scores.trajectories[t];
+    if (!traj) continue;
+    const label = getTaskDefinition(t).shortLabel;
+    for (const m of traj.perControl) {
+      lines.push(
+        [
+          record.id,
+          t,
+          `"${label}"`,
+          m.control,
+          m.adjustmentCount,
+          m.pathLength.toFixed(2),
+          m.directionReversals,
+          m.overshootMagnitude.toFixed(2),
+          m.dwellTimeMs,
+          m.visitCount,
+          m.revisitCount,
+          m.firstTouchOrder,
+        ].join(','),
+      );
+    }
+  }
+
+  // Standardized questionnaires: scale scores + every item-level response
+  if (administeredQ.length > 0) {
+    lines.push('');
+    lines.push('# questionnaire_scores');
+    lines.push(['questionnaire', 'scale_key', 'scale_label', 'score', 'kind', 'min', 'max', 'duration_ms'].join(','));
+    for (const { id, result } of administeredQ) {
+      for (const sc of result.scores) {
+        lines.push(
+          [id, sc.key, `"${sc.label}"`, sc.value, sc.kind, sc.min, sc.max, result.durationMs].join(','),
+        );
+      }
+    }
+
+    lines.push('');
+    lines.push('# questionnaire_items');
+    lines.push(['questionnaire', 'item_id', 'question', 'response'].join(','));
+    for (const { def, id, result } of administeredQ) {
+      for (const item of questionnaireItems(def)) {
+        lines.push(
+          [id, item.id, `"${item.text.replace(/"/g, '""')}"`, result.responses[item.id] ?? ''].join(','),
+        );
+      }
+    }
+  }
+
+  // Section 3: complete raw adjustment stream
+  lines.push('');
+  lines.push('# raw_adjustment_events');
+  lines.push(['assessment_id', 'task', 'timestamp_ms', 'control', 'value'].join(','));
+  for (const t of tasks) {
+    for (const ev of record.tasks[t]!.adjustmentTrajectory) {
+      lines.push([record.id, t, ev.timestamp, ev.control, ev.value].join(','));
+    }
+  }
+
+  return lines.join('\n') + '\n';
 }

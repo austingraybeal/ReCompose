@@ -26,6 +26,7 @@ export default function UploadZone() {
     bodyComp: { label: 'Body Composition CSV', accept: '.csv', description: 'Body fat %, BMI, weight...', content: null, fileName: null },
   });
   const { loadScan } = useScanLoader();
+  const setScanFileName = useScanStore((st) => st.setScanFileName);
   const isLoading = useScanStore((s) => s.isLoading);
   const error = useScanStore((s) => s.error);
   const inputRefs = {
@@ -72,9 +73,10 @@ export default function UploadZone() {
 
     // Auto-load if all three are present
     if (updated.obj.content && updated.coreMeasures.content && updated.bodyComp.content) {
+      setScanFileName(updated.obj.fileName ?? null);
       await loadScan(updated.obj.content, updated.coreMeasures.content, updated.bodyComp.content);
     }
-  }, [files, loadScan]);
+  }, [files, loadScan, setScanFileName]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -99,10 +101,11 @@ export default function UploadZone() {
       setFiles(updated);
 
       if (updated.obj.content && updated.coreMeasures.content && updated.bodyComp.content) {
+        setScanFileName(updated.obj.fileName ?? null);
         loadScan(updated.obj.content, updated.coreMeasures.content, updated.bodyComp.content);
       }
     });
-  }, [files, loadScan]);
+  }, [files, loadScan, setScanFileName]);
 
   const allLoaded = files.obj.content && files.coreMeasures.content && files.bodyComp.content;
   const loadedCount = [files.obj.content, files.coreMeasures.content, files.bodyComp.content].filter(Boolean).length;
@@ -113,7 +116,7 @@ export default function UploadZone() {
       <motion.div
         className="relative rounded-2xl p-6 text-center cursor-pointer transition-all duration-200"
         style={{
-          background: dragOver ? 'rgba(62, 207, 180, 0.08)' : 'var(--rc-bg-surface)',
+          background: dragOver ? 'rgba(168, 98, 248, 0.08)' : 'var(--rc-bg-surface)',
           border: dragOver ? '2px dashed var(--rc-accent)' : '2px dashed var(--rc-border-default)',
           boxShadow: dragOver ? 'var(--rc-shadow-glow)' : 'none',
         }}
@@ -153,7 +156,7 @@ export default function UploadZone() {
               border: slot.content
                 ? '1px solid var(--rc-border-accent)'
                 : '1px solid var(--rc-border-default)',
-              boxShadow: slot.content ? '0 0 10px rgba(62, 207, 180, 0.1)' : 'none',
+              boxShadow: slot.content ? '0 0 10px rgba(168, 98, 248, 0.1)' : 'none',
             }}
           >
             <div className="flex items-center gap-3">
@@ -216,9 +219,10 @@ export default function UploadZone() {
         </motion.div>
       )}
 
+      {/* Client-side privacy — a headline differentiator, stated plainly */}
       <div className="mt-4 text-center">
         <p className="text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
-          Your scan data never leaves your device.
+          Processed entirely on this device — no scan data is ever transmitted.
         </p>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { useScanStore } from '@/lib/stores/scanStore';
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useGenderStore } from '@/lib/stores/genderStore';
 import { deformMesh } from '@/lib/morph/morphEngine';
+import { computeAndroidness } from '@/lib/morph/sensitivityModel';
 import type { BufferGeometry } from 'three';
 
 /**
@@ -41,7 +42,9 @@ export function useBodyMorph() {
       deltaBodyFat,
       segmentOverrides,
       scanData.adjacency,
-      gender
+      gender,
+      scanData.armThreshold,
+      computeAndroidness(gender, scanData.bodyComp?.waistToHipRatio)
     );
 
     positions.needsUpdate = true;

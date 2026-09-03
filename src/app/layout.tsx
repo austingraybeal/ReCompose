@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ReCompose — See your future form',
-  description: 'Interactive 3D body composition visualization. Upload a body scan and explore morphing at different body fat percentages.',
+  title: 'ReCompose — Perception, Measured',
+  description:
+    'Avatar-based body image assessment on your own 3D body scan. Segmental morphing anchored to body composition, with the complete adjustment trajectory captured as measurement data. All processing happens on your device.',
+  applicationName: 'ReCompose',
 };
 
 export default function RootLayout({
