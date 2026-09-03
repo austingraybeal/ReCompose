@@ -19,7 +19,8 @@ export default function SegmentSlider({ segmentId, label, icon, focused }: Segme
   const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
   const showValues = useAssessmentStore((s) => s.showValues);
   const segmentHighlight = useViewStore((s) => s.segmentHighlight);
-  const hideNumbers = isAssessmentMode && !showValues;
+  const isPreview = useViewStore((s) => s.appMode === 'preview');
+  const hideNumbers = (isAssessmentMode && !showValues) || isPreview;
 
   const isActive = value !== 0;
   // Segments overlay on: the pill picks up its region's color as a soft

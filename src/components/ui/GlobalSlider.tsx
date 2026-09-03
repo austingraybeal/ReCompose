@@ -2,6 +2,7 @@
 
 import { useMorphStore } from '@/lib/stores/morphStore';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import { useViewStore } from '@/lib/stores/viewStore';
 import { useGenderStore } from '@/lib/stores/genderStore';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { computeAndroidness } from '@/lib/morph/sensitivityModel';
@@ -26,7 +27,9 @@ export default function GlobalSlider() {
   const bodyComp = useScanStore((s) => s.scanData?.bodyComp);
   const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
   const showValues = useAssessmentStore((s) => s.showValues);
-  const hideNumbers = isAssessmentMode && !showValues;
+  const isPreview = useViewStore((s) => s.appMode === 'preview');
+  // Blinded in BIDS tasks (unless revealed) and always in preview mode.
+  const hideNumbers = (isAssessmentMode && !showValues) || isPreview;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalBodyFat(parseFloat(e.target.value));
@@ -110,8 +113,8 @@ export default function GlobalSlider() {
           }}
         />
 
-        {/* Range anchors hidden during BIDS so the scale isn't suggested */}
-        {!isAssessmentMode && (
+        {/* Range anchors hidden during BIDS and preview so the scale isn't suggested */}
+        {!isAssessmentMode && !isPreview && (
           <div className="flex justify-between mt-2">
             <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>5%</span>
             <span className="text-[10px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>55%</span>

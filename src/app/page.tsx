@@ -12,6 +12,8 @@ import {
 } from '@/lib/assessment/sessionFile';
 import UploadZone from '@/components/ui/UploadZone';
 import BrandLogo from '@/components/ui/BrandLogo';
+import { useScanLoader } from '@/hooks/useScanLoader';
+import { useGenderStore, type BodyGender } from '@/lib/stores/genderStore';
 import { motion } from 'framer-motion';
 
 function ModeButton({
@@ -63,6 +65,34 @@ export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [savedSession, setSavedSession] = useState<SessionFile | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const { loadScan } = useScanLoader();
+  const setGender = useGenderStore((s) => s.setGender);
+  const setScanFileName = useScanStore((s) => s.setScanFileName);
+  const [previewLoading, setPreviewLoading] = useState<'female' | 'male' | null>(null);
+  const [previewError, setPreviewError] = useState(false);
+
+  // Blinded familiarization: load a bundled default avatar (no values
+  // shown anywhere) so participants can explore an opposite-sex body
+  // before their own BIDS assessment without being unblinded.
+  const startPreview = async (sex: Exclude<BodyGender, 'neutral'>) => {
+    if (previewLoading) return;
+    setPreviewError(false);
+    setPreviewLoading(sex);
+    try {
+      const [obj, measures, comp] = await Promise.all([
+        fetch(`/preview/${sex}.obj`).then((r) => { if (!r.ok) throw new Error(); return r.text(); }),
+        fetch(`/preview/${sex}-measures.csv`).then((r) => { if (!r.ok) throw new Error(); return r.text(); }),
+        fetch(`/preview/${sex}-composition.csv`).then((r) => { if (!r.ok) throw new Error(); return r.text(); }),
+      ]);
+      setGender(sex);
+      setScanFileName(`preview-${sex}`);
+      await loadScan(obj, measures, comp);
+      setAppMode('preview'); // the scanData+appMode effect routes to /viewer
+    } catch {
+      setPreviewError(true);
+      setPreviewLoading(null);
+    }
+  };
 
   // Surface the auto-backed-up session, if one exists.
   useEffect(() => {
@@ -159,6 +189,39 @@ export default function HomePage() {
             selected={appMode === 'bids'}
             onSelect={setAppMode}
           />
+        </div>
+
+        {/* Blinded default-avatar previews (no values shown anywhere) */}
+        <div className="mt-3 flex items-center justify-center gap-2">
+          <span className="text-[10px] uppercase tracking-[2px] font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+            Familiarization
+          </span>
+          {(['female', 'male'] as const).map((sex) => (
+            <button
+              key={sex}
+              onClick={() => startPreview(sex)}
+              disabled={previewLoading !== null}
+              className="px-3.5 py-1.5 rounded-full text-rc-xs font-mono tracking-wide transition-all duration-150"
+              style={{
+                background: previewLoading === sex ? 'rgba(168, 98, 248, 0.15)' : 'var(--rc-bg-elevated)',
+                color: previewLoading === sex ? 'var(--rc-accent)' : 'var(--rc-text-secondary)',
+                border: '1px solid var(--rc-border-default)',
+                opacity: previewLoading && previewLoading !== sex ? 0.5 : 1,
+              }}
+            >
+              {previewLoading === sex
+                ? 'Loading…'
+                : `Preview ${sex === 'female' ? 'Female' : 'Male'}`}
+            </button>
+          ))}
+          {previewError && (
+            <span className="text-rc-xs font-mono" style={{ color: '#e0445a' }}>
+              Preview failed to load.
+            </span>
+          )}
+        </div>
+        <div className="mt-1.5 text-center text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
+          Explore a default avatar with all values hidden — no upload needed.
         </div>
       </motion.div>
 

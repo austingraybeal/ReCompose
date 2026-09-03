@@ -2,15 +2,27 @@
 
 import ToggleBar from '@/components/ui/ToggleBar';
 import BrandLogo from '@/components/ui/BrandLogo';
+import { useRouter } from 'next/navigation';
 import { useScanStore } from '@/lib/stores/scanStore';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
 import { useCoefficientStore } from '@/lib/stores/coefficientStore';
+import { useViewStore } from '@/lib/stores/viewStore';
 
 export default function Header() {
+  const router = useRouter();
   const hasScan = useScanStore((s) => !!s.scanData);
+  const clearScan = useScanStore((s) => s.clearScan);
   const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
   const startAssessment = useAssessmentStore((s) => s.startAssessment);
   const resetAssessment = useAssessmentStore((s) => s.resetAssessment);
+  const isPreview = useViewStore((s) => s.appMode === 'preview');
+  const setAppMode = useViewStore((s) => s.setAppMode);
+
+  const exitPreview = () => {
+    clearScan();
+    setAppMode(null);
+    router.push('/');
+  };
 
   return (
     <header
@@ -31,9 +43,24 @@ export default function Header() {
       <div className="flex items-center gap-3">
         {hasScan && !isAssessmentMode && <ToggleBar />}
 
-        {hasScan && !isAssessmentMode && <ResearchButton />}
+        {/* Research panel exposes model values — never in blinded preview */}
+        {hasScan && !isAssessmentMode && !isPreview && <ResearchButton />}
 
-        {hasScan && (
+        {hasScan && isPreview && (
+          <button
+            onClick={exitPreview}
+            className="px-3.5 py-1.5 rounded-full text-rc-xs font-mono tracking-wide transition-all duration-200"
+            style={{
+              background: 'var(--rc-bg-elevated)',
+              color: 'var(--rc-text-secondary)',
+              border: '1px solid var(--rc-border-default)',
+            }}
+          >
+            Exit Preview
+          </button>
+        )}
+
+        {hasScan && !isPreview && (
           isAssessmentMode ? (
             <button
               onClick={resetAssessment}

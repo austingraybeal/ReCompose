@@ -2,6 +2,7 @@
 
 import { useMetricProjection } from '@/hooks/useMetricProjection';
 import { useAssessmentStore } from '@/lib/stores/assessmentStore';
+import { useViewStore } from '@/lib/stores/viewStore';
 import { motion } from 'framer-motion';
 
 interface MetricRowProps {
@@ -56,13 +57,15 @@ export default function MetricsPanel() {
   const isAssessmentMode = useAssessmentStore((s) => s.isAssessmentMode);
   const currentStep = useAssessmentStore((s) => s.currentStep);
   const showValues = useAssessmentStore((s) => s.showValues);
+  const isPreview = useViewStore((s) => s.appMode === 'preview');
 
   // During BIDS tasks the derived metrics would leak the hidden BF numbers;
-  // the whole panel hides unless the investigator reveals values.
+  // the whole panel hides unless the investigator reveals values. Preview
+  // mode is fully blinded, so the panel never shows there.
   const inTask =
     isAssessmentMode && currentStep !== null &&
     currentStep !== 'welcome' && currentStep !== 'complete';
-  if (inTask && !showValues) return null;
+  if ((inTask && !showValues) || isPreview) return null;
 
   if (!metrics || !originalMetrics) {
     return (

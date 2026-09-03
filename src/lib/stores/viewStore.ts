@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CameraPreset } from '@/types/scan';
 
-export type AppMode = 'free' | 'bids';
+export type AppMode = 'free' | 'bids' | 'preview';
 
 interface ViewState {
   /**
