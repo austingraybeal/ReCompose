@@ -11,6 +11,7 @@
 export type TaskId =
   | 'perceived'
   | 'ideal'
+  | 'healthy'
   | 'partner'
   | 'social_media'
   | 'friends'
@@ -56,6 +57,15 @@ export const TASK_DEFINITIONS: readonly TaskDefinition[] = [
     instruction: 'Adjust the body to show your ideal body — how you would most like to look.',
     confirmLabel: 'Confirm Ideal Body',
     defaultOn: true,
+    category: 'core',
+  },
+  {
+    id: 'healthy',
+    label: 'What a healthy body looks like',
+    shortLabel: 'Healthy',
+    instruction:
+      'Adjust the body to the point that best represents what a healthy body looks like.',
+    confirmLabel: 'Confirm Healthy Body',
     category: 'core',
   },
   {
