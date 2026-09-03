@@ -93,7 +93,8 @@ export default function GlobalSlider() {
             <div className="text-[9px] uppercase tracking-[1px] font-mono mb-0.5"
               style={{ color: 'var(--rc-text-dim)' }}
             >
-              ACTUAL
+              {/* "Actual" would prime participants during blinded flows */}
+              {isAssessmentMode || isPreview ? 'ORIGINAL' : 'ACTUAL'}
             </div>
             <div className="w-px h-5" style={{ background: 'var(--rc-text-dim)' }} />
           </div>
