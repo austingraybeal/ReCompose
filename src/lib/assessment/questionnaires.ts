@@ -243,11 +243,24 @@ const BISS: QuestionnaireDef = {
       ],
     },
   ],
-  score: (r) => [
-    { key: 'biss_mean', label: 'BISS (item average)',
-      value: mean(collect(r, ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'])),
-      kind: 'mean', min: 1, max: 9 },
-  ],
+  score: (r) => {
+    // Standard BISS recode: items 2, 3, 4, and 6 (whose printed anchors
+    // run satisfied/attractive/better -> dissatisfied/unattractive/worse)
+    // are reversed (10 - x) so a higher composite always means a more
+    // positive body image state.
+    const rev9 = new Set(['b2', 'b3', 'b4', 'b6']);
+    const vals = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6']
+      .map((id) => {
+        const v = r[id];
+        if (typeof v !== 'number') return null;
+        return rev9.has(id) ? 10 - v : v;
+      })
+      .filter((v): v is number => v !== null);
+    return [
+      { key: 'biss_mean', label: 'BISS (item average, recoded)',
+        value: mean(vals), kind: 'mean', min: 1, max: 9 },
+    ];
+  },
 };
 
 // ── FIIT ───────────────────────────────────────────────────────────────
