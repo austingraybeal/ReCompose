@@ -11,7 +11,7 @@ import { useGenderStore } from '@/lib/stores/genderStore';
 import { computeDerivedValues } from '@/lib/assessment/derivedValues';
 import { buildSessionFile, saveSessionToBrowser } from '@/lib/assessment/sessionFile';
 import WelcomeScreen from './WelcomeScreen';
-import SocioculturalForm from './SocioculturalForm';
+import QuestionnairesForm from './QuestionnairesForm';
 import ProgressBar from './ProgressBar';
 import InstructionCard from './InstructionCard';
 import TaskControls from './TaskControls';
@@ -169,9 +169,9 @@ export default function AssessmentOverlay({ canvasRef }: AssessmentOverlayProps)
     return <WelcomeScreen />;
   }
 
-  // Sociocultural exposure module (after the last adjustment task)
-  if (currentStep === 'sociocultural') {
-    return <SocioculturalForm />;
+  // Standardized questionnaires (after the last adjustment task)
+  if (currentStep === 'questionnaires') {
+    return <QuestionnairesForm />;
   }
 
   // Results screen (or waiting for scores to compute)

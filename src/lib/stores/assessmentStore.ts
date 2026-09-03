@@ -39,10 +39,10 @@ interface AssessmentState {
   /** Researcher-entered participant/session ID (optional). */
   participantId: string;
 
-  /** Administer the sociocultural exposure module after the tasks. */
-  includeSociocultural: boolean;
-  socioculturalResult:
-    | import('@/lib/assessment/socioculturalItems').SocioculturalResult
+  /** Standardized questionnaires to administer after the tasks. */
+  selectedQuestionnaires: import('@/lib/assessment/questionnaires').QuestionnaireId[];
+  questionnaireResults:
+    | import('@/lib/assessment/questionnaires').QuestionnaireResults
     | null;
 
   /** Implied-measurement rows carried by a loaded session file, so the
@@ -62,9 +62,11 @@ interface AssessmentState {
   toggleTask: (task: TaskType) => void;
   toggleShowValues: () => void;
   setParticipantId: (id: string) => void;
-  toggleSociocultural: () => void;
-  submitSociocultural: (
-    result: import('@/lib/assessment/socioculturalItems').SocioculturalResult,
+  toggleQuestionnaire: (
+    id: import('@/lib/assessment/questionnaires').QuestionnaireId,
+  ) => void;
+  submitQuestionnaires: (
+    results: import('@/lib/assessment/questionnaires').QuestionnaireResults,
   ) => void;
   /** Hydrate the store from a saved session file (results-only view). */
   hydrateSession: (payload: {
@@ -104,19 +106,23 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   resetCount: 0,
   showValues: false,
   participantId: '',
-  includeSociocultural: true,
-  socioculturalResult: null,
+  selectedQuestionnaires: [],
+  questionnaireResults: null,
   sessionDerived: null,
   snapshotSets: {},
   assessmentRecord: null,
 
   setParticipantId: (id) => set({ participantId: id }),
 
-  toggleSociocultural: () =>
-    set((s) => ({ includeSociocultural: !s.includeSociocultural })),
+  toggleQuestionnaire: (id) =>
+    set((s) => ({
+      selectedQuestionnaires: s.selectedQuestionnaires.includes(id)
+        ? s.selectedQuestionnaires.filter((x) => x !== id)
+        : [...s.selectedQuestionnaires, id],
+    })),
 
-  submitSociocultural: (result) =>
-    set({ socioculturalResult: result, currentStep: 'complete' }),
+  submitQuestionnaires: (results) =>
+    set({ questionnaireResults: results, currentStep: 'complete' }),
 
   hydrateSession: ({ record, snapshotSets, derived }) =>
     set({
@@ -138,8 +144,8 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       adjustmentTrajectory: [],
       resetCount: 0,
       showValues: false,
-      includeSociocultural: true,
-      socioculturalResult: null,
+      selectedQuestionnaires: [],
+      questionnaireResults: null,
       snapshotSets: {},
       assessmentRecord: null,
     }),
@@ -202,8 +208,8 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
     const nextStep: AssessmentStep =
       idx < order.length - 1
         ? order[idx + 1]
-        : get().includeSociocultural
-          ? 'sociocultural'
+        : get().selectedQuestionnaires.length > 0
+          ? 'questionnaires'
           : 'complete';
     set({
       taskResults: { ...taskResults, [taskType]: result },
@@ -230,7 +236,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   },
 
   completeAssessment: (actual, scanId) => {
-    const { taskResults, selectedTasks, participantId, socioculturalResult } = get();
+    const { taskResults, selectedTasks, participantId, questionnaireResults } = get();
     const order = orderedSelection(selectedTasks);
     if (!order.every((t) => taskResults[t])) return;
 
@@ -245,7 +251,9 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       selectedTasks: order,
       tasks: { ...taskResults },
       scores,
-      ...(socioculturalResult ? { sociocultural: socioculturalResult } : {}),
+      ...(questionnaireResults && Object.keys(questionnaireResults).length > 0
+        ? { questionnaires: questionnaireResults }
+        : {}),
     };
 
     set({ assessmentRecord: record, currentStep: 'complete' });
@@ -261,8 +269,8 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       adjustmentTrajectory: [],
       resetCount: 0,
       showValues: false,
-      includeSociocultural: true,
-      socioculturalResult: null,
+      selectedQuestionnaires: [],
+      questionnaireResults: null,
       snapshotSets: {},
       assessmentRecord: null,
     }),

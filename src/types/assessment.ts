@@ -108,9 +108,9 @@ export interface AssessmentRecord {
 
   scores: BIDSScores;
 
-  /** Sociocultural exposure module result, when administered. */
-  sociocultural?: import('@/lib/assessment/socioculturalItems').SocioculturalResult;
+  /** Standardized questionnaire results, when administered. */
+  questionnaires?: import('@/lib/assessment/questionnaires').QuestionnaireResults;
 }
 
 /** Assessment flow step for the state machine */
-export type AssessmentStep = TaskType | 'welcome' | 'sociocultural' | 'complete';
+export type AssessmentStep = TaskType | 'welcome' | 'questionnaires' | 'complete';

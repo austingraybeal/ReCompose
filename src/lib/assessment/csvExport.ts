@@ -1,7 +1,7 @@
 import type { AssessmentRecord, BIDSScores } from '@/types/assessment';
 import { SEGMENT_ORDER } from '@/lib/constants/segmentDefs';
 import { getTaskDefinition } from './taskRegistry';
-import { SOCIO_ITEMS } from './socioculturalItems';
+import { QUESTIONNAIRES, questionnaireItems } from './questionnaires';
 import type { DerivedRow } from './derivedValues';
 
 /**
@@ -23,6 +23,10 @@ export function generateCSVExport(
 ): string {
   const tasks = record.selectedTasks;
   const comparisons = tasks.filter((t) => t !== 'perceived');
+  // Administered questionnaires in registry order
+  const administeredQ = QUESTIONNAIRES.filter((d) => record.questionnaires?.[d.id]).map(
+    (d) => ({ id: d.id, def: d, result: record.questionnaires![d.id]! }),
+  );
 
   const headers = [
     'assessment_id',
@@ -46,11 +50,9 @@ export function generateCSVExport(
     'total_duration_ms',
     ...tasks.map((t) => `${t}_resets`),
     'coefficient_profile',
-    'socio_exposure',
-    'socio_comparison',
-    'socio_editing',
-    'socio_engagement',
-    'socio_total',
+    ...administeredQ.flatMap(({ id, result }) =>
+      result.scores.map((sc) => `${id}_${sc.key}`),
+    ),
     ...tasks.flatMap((t) => [
       `${t}_traj_adjustments`,
       `${t}_traj_path_length`,
@@ -87,11 +89,7 @@ export function generateCSVExport(
     scores.totalAssessmentDuration,
     ...tasks.map((t) => record.tasks[t]!.resetCount),
     `"${record.coefficientProfile ?? 'default'}"`,
-    record.sociocultural?.subscales.exposure ?? '',
-    record.sociocultural?.subscales.comparison ?? '',
-    record.sociocultural?.subscales.editing ?? '',
-    record.sociocultural?.subscales.engagement ?? '',
-    record.sociocultural?.subscales.total ?? '',
+    ...administeredQ.flatMap(({ result }) => result.scores.map((sc) => sc.value)),
     ...tasks.flatMap((t) => {
       const m = scores.trajectories[t];
       if (!m) return [0, '0', 0, 0, 0, '0', ''];
@@ -207,23 +205,29 @@ export function generateCSVExport(
     }
   }
 
-  // Sociocultural exposure module: every response + subscales
-  if (record.sociocultural) {
-    const socio = record.sociocultural;
+  // Standardized questionnaires: scale scores + every item-level response
+  if (administeredQ.length > 0) {
     lines.push('');
-    lines.push('# sociocultural');
-    lines.push(['item_id', 'section', 'question', 'response'].join(','));
-    for (const item of SOCIO_ITEMS) {
-      const v = socio.responses[item.id];
-      const rendered = Array.isArray(v) ? v.join('|') : (v ?? '');
-      lines.push(
-        [item.id, item.section, `"${item.text.replace(/"/g, '""')}"`, `"${rendered}"`].join(','),
-      );
+    lines.push('# questionnaire_scores');
+    lines.push(['questionnaire', 'scale_key', 'scale_label', 'score', 'kind', 'min', 'max', 'duration_ms'].join(','));
+    for (const { id, result } of administeredQ) {
+      for (const sc of result.scores) {
+        lines.push(
+          [id, sc.key, `"${sc.label}"`, sc.value, sc.kind, sc.min, sc.max, result.durationMs].join(','),
+        );
+      }
     }
-    for (const [key, val] of Object.entries(socio.subscales)) {
-      lines.push([`subscale_${key}`, 'score', '""', val].join(','));
+
+    lines.push('');
+    lines.push('# questionnaire_items');
+    lines.push(['questionnaire', 'item_id', 'question', 'response'].join(','));
+    for (const { def, id, result } of administeredQ) {
+      for (const item of questionnaireItems(def)) {
+        lines.push(
+          [id, item.id, `"${item.text.replace(/"/g, '""')}"`, result.responses[item.id] ?? ''].join(','),
+        );
+      }
     }
-    lines.push(['duration_ms', 'meta', '""', socio.durationMs].join(','));
   }
 
   // Section 3: complete raw adjustment stream

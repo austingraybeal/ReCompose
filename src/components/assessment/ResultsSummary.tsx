@@ -19,6 +19,7 @@ import {
 import { getTaskDefinition } from '@/lib/assessment/taskRegistry';
 import { SEGMENTS } from '@/lib/constants/segmentDefs';
 import { computeDerivedValues } from '@/lib/assessment/derivedValues';
+import { QUESTIONNAIRES } from '@/lib/assessment/questionnaires';
 import { buildSessionFile, sessionBaseName } from '@/lib/assessment/sessionFile';
 import ResultFigures from './ResultFigures';
 import type { BIDSScores, TaskType, SegmentDistortion } from '@/types/assessment';
@@ -520,45 +521,61 @@ export default function ResultsSummary() {
           </div>
         )}
 
-        {/* Sociocultural exposure subscales (when administered) */}
-        {record.sociocultural && (
+        {/* Standardized questionnaire scores (when administered) */}
+        {record.questionnaires && QUESTIONNAIRES.some((d) => record.questionnaires![d.id]) && (
           <div
             className="p-5 rounded-xl mb-8"
             style={{ background: 'var(--rc-bg-surface)', border: '1px solid var(--rc-border-default)' }}
           >
             <div className="text-[10px] uppercase tracking-[2px] font-mono mb-3" style={{ color: 'var(--rc-text-dim)' }}>
-              Sociocultural Exposure
+              Questionnaires
             </div>
-            {([
-              ['Appearance-content exposure', record.sociocultural.subscales.exposure],
-              ['Appearance comparison', record.sociocultural.subscales.comparison],
-              ['Photo editing / filters', record.sociocultural.subscales.editing],
-              ['Appearance engagement', record.sociocultural.subscales.engagement],
-              ['Total', record.sociocultural.subscales.total],
-            ] as Array<[string, number]>).map(([label, value]) => (
-              <div key={label} className="flex items-center gap-3 py-1.5">
-                <span className="text-rc-xs font-mono w-52 shrink-0" style={{ color: 'var(--rc-text-secondary)' }}>
-                  {label}
-                </span>
-                <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--rc-bg-primary)' }}>
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${Math.max(2, ((value - 1) / 4) * 100)}%`,
-                      background: 'linear-gradient(90deg, var(--rc-accent), #4d1979)',
-                    }}
-                  />
+            {QUESTIONNAIRES.filter((d) => record.questionnaires![d.id]).map((def) => {
+              const result = record.questionnaires![def.id]!;
+              return (
+                <div key={def.id} className="mb-4 last:mb-0">
+                  <div className="flex items-baseline justify-between mb-1.5">
+                    <div className="text-rc-sm font-mono font-bold" style={{ color: 'var(--rc-text-primary)' }}>
+                      {def.title}
+                    </div>
+                    <div className="text-rc-xs font-mono" style={{ color: 'var(--rc-text-dim)' }}>
+                      {formatDuration(result.durationMs)}
+                    </div>
+                  </div>
+                  {result.scores.map((sc) => {
+                    const frac = Math.max(0, Math.min(1, (sc.value - sc.min) / (sc.max - sc.min)));
+                    return (
+                      <div key={sc.key} className="flex items-center gap-3 py-1">
+                        <span className="text-rc-xs font-mono w-52 shrink-0" style={{ color: 'var(--rc-text-secondary)' }}>
+                          {sc.label}
+                        </span>
+                        <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--rc-bg-primary)' }}>
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(2, frac * 100)}%`,
+                              background: 'linear-gradient(90deg, var(--rc-accent), #4d1979)',
+                            }}
+                          />
+                        </div>
+                        <span className="text-rc-xs font-mono w-20 text-right tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
+                          {sc.kind === 'sum' ? sc.value : sc.value.toFixed(2)}
+                          <span style={{ color: 'var(--rc-text-dim)' }}> /{sc.max}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-                <span className="text-rc-xs font-mono w-10 text-right tabular-nums" style={{ color: 'var(--rc-text-primary)' }}>
-                  {value ? value.toFixed(2) : '—'}
-                </span>
-              </div>
-            ))}
+              );
+            })}
             <div className="mt-2 text-rc-xs" style={{ color: 'var(--rc-text-dim)' }}>
-              Subscale means, 1 (never) to 5 (always). Item-level responses are included in the CSV export.
+              Scored per instrument instructions (subscale averages with specified reverse-scored
+              items; totals as sums). Item-level responses are in the CSV export.
             </div>
           </div>
         )}
+
+        {/* Five assessment figures
 
         {/* Five assessment figures + adaptive headline */}
         <ResultFigures record={record} scores={scores} derived={derived} selectedView={selectedView} />

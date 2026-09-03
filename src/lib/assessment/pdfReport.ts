@@ -11,6 +11,7 @@ import {
 // (describeRegionalChanges superseded by the podium blocks)
 import { getTaskDefinition } from './taskRegistry';
 import type { DerivedRow } from './derivedValues';
+import { QUESTIONNAIRES } from './questionnaires';
 import { computeFigureData } from './figureData';
 
 export interface PDFReportExtras {
@@ -548,45 +549,61 @@ export async function generatePDFReport(
   }
   y += 5;
 
-  // ── Sociocultural exposure module (when administered) ────────────────
-  if (record.sociocultural) {
-    const socio = record.sociocultural;
-    sectionTitle('SOCIOCULTURAL EXPOSURE', 26);
-    const subs: Array<[string, number]> = [
-      ['Appearance-content exposure', socio.subscales.exposure],
-      ['Appearance comparison', socio.subscales.comparison],
-      ['Photo editing / filters', socio.subscales.editing],
-      ['Appearance engagement', socio.subscales.engagement],
-      ['Total', socio.subscales.total],
-    ];
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    for (const [label, value] of subs) {
-      ensureRoom(5);
-      doc.setTextColor(...TEXT_SECONDARY);
-      doc.text(label, margin, y);
-      // subscale bar (1-5 scale)
-      const barX = margin + 52;
-      const barW = 50;
-      doc.setFillColor(...SURFACE);
-      doc.rect(barX, y - 2.6, barW, 3.4, 'F');
-      doc.setFillColor(...ACCENT);
-      doc.rect(barX, y - 2.6, Math.max(0.5, ((value - 1) / 4) * barW), 3.4, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...TEXT);
-      doc.text(value ? value.toFixed(2) : '-', barX + barW + 4, y);
-      doc.setFont('helvetica', 'normal');
-      y += 5;
+  // ── Standardized questionnaires (when administered) ──────────────────
+  {
+    const administeredQ = QUESTIONNAIRES.filter((d) => record.questionnaires?.[d.id]);
+    if (administeredQ.length > 0) {
+      sectionTitle('QUESTIONNAIRES', 26);
+      for (const def of administeredQ) {
+        const result = record.questionnaires![def.id]!;
+        ensureRoom(8 + result.scores.length * 5 + 4);
+        doc.setTextColor(...TEXT);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text(def.title, margin, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6);
+        doc.setTextColor(...TEXT_DIM);
+        doc.text(`completed in ${formatDuration(result.durationMs)}`, margin + 90, y);
+        y += 5;
+        doc.setFontSize(7);
+        for (const sc of result.scores) {
+          ensureRoom(5);
+          doc.setTextColor(...TEXT_SECONDARY);
+          doc.text(sc.label, margin + 2, y);
+          const barX = margin + 62;
+          const barW = 50;
+          doc.setFillColor(...SURFACE);
+          doc.rect(barX, y - 2.6, barW, 3.4, 'F');
+          const frac = Math.max(0, Math.min(1, (sc.value - sc.min) / (sc.max - sc.min)));
+          doc.setFillColor(...ACCENT);
+          doc.rect(barX, y - 2.6, Math.max(0.5, frac * barW), 3.4, 'F');
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...TEXT);
+          doc.text(
+            sc.kind === 'sum'
+              ? `${sc.value} (${sc.min}-${sc.max})`
+              : `${sc.value.toFixed(2)} (${sc.min}-${sc.max})`,
+            barX + barW + 4,
+            y,
+          );
+          doc.setFont('helvetica', 'normal');
+          y += 5;
+        }
+        y += 3;
+      }
+      doc.setTextColor(...TEXT_DIM);
+      doc.setFontSize(6);
+      doc.text(
+        'Scored per instrument instructions (subscale averages with specified reverse-scored items; totals as sums). Item-level responses are in the CSV export.',
+        margin,
+        y,
+      );
+      y += 8;
     }
-    doc.setTextColor(...TEXT_DIM);
-    doc.setFontSize(6);
-    doc.text(
-      `Subscale means, 1 (never) to 5 (always). Module duration: ${formatDuration(socio.durationMs)}. Full item responses are in the CSV export.`,
-      margin,
-      y,
-    );
-    y += 8;
   }
+
+  // ── Figures
 
   // ── Figures ──────────────────────────────────────────────────────────
   {
